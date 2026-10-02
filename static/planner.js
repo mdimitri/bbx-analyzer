@@ -109,6 +109,7 @@ async function renderPlanner() {
         <div class="hint">Q = centre / width. Higher Q = narrower, less delay, but misses a peak that drifts. Betaflight sets a static notch by centre and the lower −3 dB edge (cutoff): <b id="fpMc">${notchCut(F.man.f, F.man.q).toFixed(0)}</b> Hz.</div>`)}`, { tip: "fp_manual" }),
     tg("Low-pass", `<label class="ctl" data-tip="sim_gmul">Gyro × ${sl("fpG", 0.5, 2, 0.05, F.gmul, v => (+v).toFixed(2))}</label><label class="ctl" data-tip="sim_dmul">D-term × ${sl("fpD", 0.5, 2, 0.05, F.dmul, v => (+v).toFixed(2))}</label>
       <button class="btn sm ghost" id="fpReset">Reset</button>`),
+    tg("D-term spectrum", `<span class="chips" id="fpDs">${chip("d", F.dOn !== false ? "now & planned" : "hidden", F.dOn !== false, { color: css("--s7"), dash: true })}</span>`, { tip: "fp_dterm" }),
     tg("Axes", focusHTML()),
     resCtlHTML(d.resonances.length)]);
   bindNview(); bindFocus(); bindResCtl();
@@ -116,26 +117,28 @@ async function renderPlanner() {
   $("controls").querySelectorAll("[data-n]").forEach(b => b.onclick = () => { const n = d.notches.find(x => x.id === b.dataset.n); F.off[n.id] = A.isOn(n); saveFp(); render(); });
   $("controls").querySelectorAll("[data-s]").forEach(b => b.onclick = () => { const st = d.stages.gyro_notch.find(x => String(x.slot) === b.dataset.s); F.statOff[st.slot] = !A.statOff(st); saveFp(); render(); });
   $("fpM").onclick = () => { F.man.on = !F.man.on; saveFp(); render(); };
+  $("fpDs").onclick = () => { F.dOn = F.dOn === false; saveFp(); render(); };
   const live = (id, k, fmt, set) => { $(id).oninput = e => { set(+e.target.value); $(id + "V").textContent = fmt(e.target.value);
     if ($("fpMc")) $("fpMc").textContent = notchCut(F.man.f, F.man.q).toFixed(0); clearTimeout(FP.t); FP.t = setTimeout(upd, 40); }; };
   live("fpMf", 0, v => (+v).toFixed(0) + " Hz", v => { F.man.f = v; if (!F.man.on) { F.man.on = true; } });
   live("fpMq", 0, v => (+v).toFixed(1), v => { F.man.q = v; });
   live("fpG", 0, v => (+v).toFixed(2), v => { F.gmul = v; });
   live("fpD", 0, v => (+v).toFixed(2), v => { F.dmul = v; });
-  $("fpReset").onclick = () => { S.fp = { gmul: 1, dmul: 1, man: { on: false, f: F.man.f, q: F.man.q }, off: {}, statOff: {} }; saveFp(); render(); };
+  $("fpReset").onclick = () => { S.fp = { gmul: 1, dmul: 1, man: { on: false, f: F.man.f, q: F.man.q }, off: {}, statOff: {}, dOn: F.dOn }; saveFp(); render(); };
   await drawPlanner(d);
 }
 
 async function drawPlanner(d) {
   const P = fpPredict(d), f = d.f, SH = shownAxes([0, 1, 2]).filter(i => d.axes[i]), nC = SH.length, xs = c => c ? c + 1 : "", tr = [];
+  const dVis = S.fp.dOn !== false ? true : "legendonly";
   const k0 = f.findIndex(v => v >= 10), cut = a => a.slice(k0), fx = cut(f), lightMode = document.documentElement.dataset.theme === "light";
   SH.forEach((i, c) => {
     const A = d.axes[i], s = xs(c), sb = c + 1 + nC, col = axc(i);
     tr.push(line(fx, cut(A.raw), "gyro raw", css("--muted"), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, legendgroup: "raw", showlegend: !c, line: { width: 1 } }));
     tr.push(line(fx, cut(A.filt), "filtered now", col, { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, legendgroup: "now", showlegend: !c, line: { width: 1 }, opacity: 0.55 }));
     tr.push(line(fx, cut(P.axes[i].filt), "filtered, planned", col, { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, legendgroup: "new", showlegend: !c, line: { width: 2.4 } }));
-    if (A.D) { tr.push(line(fx, cut(A.D), "D-term now", css("--s7"), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, legendgroup: "dn", showlegend: !c, line: { width: 1, dash: "dot" }, opacity: 0.6, visible: "legendonly" }));
-               tr.push(line(fx, cut(P.axes[i].D), "D-term, planned", css("--s7"), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, legendgroup: "dp", showlegend: !c, line: { width: 1.8, dash: "dot" }, visible: "legendonly" })); }
+    if (A.D) { tr.push(line(fx, cut(A.D), "D-term now", css("--s7"), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, legendgroup: "dn", showlegend: !c, line: { width: 1, dash: "dot" }, opacity: 0.6, visible: dVis }));
+               tr.push(line(fx, cut(P.axes[i].D), "D-term, planned", css("--s7"), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, legendgroup: "dp", showlegend: !c, line: { width: 2.4, dash: "dot" }, visible: dVis })); }
     tr.push(line(fx, cut(P.hg0), "gyro chain now", css("--ink"), { type: "scatter", xaxis: `x${sb}`, yaxis: `y${sb}`, legendgroup: "hg0", showlegend: false, line: { width: 1, dash: "dash" }, opacity: 0.6 }));
     tr.push(line(fx, cut(P.hg1), "gyro chain planned", css("--ink"), { type: "scatter", xaxis: `x${sb}`, yaxis: `y${sb}`, legendgroup: "hg1", showlegend: false, line: { width: 2.2 } }));
     tr.push(line(fx, cut(P.hd0), "D-term chain now", css("--s7"), { type: "scatter", xaxis: `x${sb}`, yaxis: `y${sb}`, legendgroup: "hd0", showlegend: false, line: { width: 1, dash: "dash" }, opacity: 0.6 }));

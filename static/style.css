@@ -552,3 +552,8 @@ pre.cli { margin: 4px 0 6px; background: var(--page); border: 1px solid var(--bo
 .brand small { text-transform: uppercase; letter-spacing: .18em; font-size: 10.5px; font-weight: 600; color: var(--muted); margin-left: -2px; }
 .aboutlogo { display: block; margin: 2px 0 6px; }
 :root[data-theme="light"] .aboutlogo { filter: invert(1) hue-rotate(180deg); }
+.auwbox { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); display: grid; gap: 6px; }
+.auwbox .tl { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--ink2); }
+.auwbox .propedit input { width: 76px; }
+.simtyp td { white-space: nowrap; } .simtyp td small { color: var(--ink2); } .simtyp .badge { font-size: 10px; padding: 0 5px; }
+.simtyp th small { font-weight: 400; color: var(--muted); }

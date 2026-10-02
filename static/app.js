@@ -23,6 +23,7 @@ const _fHTML = (list, head = "") => (list && list.length) ? head + list.map(f =>
 
 const api = (path, q = {}) => {
   if (S.prop) q = { prop: S.prop.inch, blades: S.prop.blades, ...q };  // the prop size the user confirmed drives every analysis
+  if (S.auw && /^(profile|simmodel)/.test(path)) q = { auw: S.auw, ...q };   // the weight they set (only these two use it server-side)
   const p = new URLSearchParams(Object.entries(q).filter(([, v]) => v != null));
   const url = `/api/${encodeURIComponent(S.file)}/${S.sub}/${path}?${p}`;
   // heavy analyses are pure functions of the URL: keep the last few, so toggling a chart option or switching tabs doesn't recompute
@@ -71,8 +72,8 @@ function base(extra = {}) {
     paper_bgcolor: css("--surface"), plot_bgcolor: css("--surface"),
     font: { family: "system-ui, -apple-system, Segoe UI, sans-serif", color: css("--ink2"), size: 12 },
     margin: { l: 46, r: 8, t: 34, b: 30 }, hovermode: "x unified", showlegend: true,
-    legend: { orientation: "h", x: 1, xanchor: "right", y: 1, yanchor: "top", yref: "container", font: { size: 12 } },
-    hoverlabel: { bgcolor: css("--surface"), bordercolor: css("--border"), font: { color: css("--ink") } },
+    legend: { orientation: "h", x: 0, xanchor: "left", y: 1, yanchor: "top", yref: "container", font: { size: 12 } },   // left: the chart toolbar shows top-right on hover
+    hoverlabel: { bgcolor: css("--surface"), bordercolor: css("--border"), font: { color: css("--ink") }, namelength: -1 },
     xaxis: { ...ax }, yaxis: { ...ax },
   }, extra, { _ax: ax });
 }
@@ -106,7 +107,7 @@ function fitMain(min) {
   $("main").style.height = Math.round(Math.max(min, innerHeight - dock - top - 10)) + "px";
 }
 const CFG = { displaylogo: false, responsive: true, modeBarButtonsToRemove: ["lasso2d", "select2d", "autoScale2d"] };
-const line = (x, y, name, color, { line: l = {}, ...o } = {}) => ({ type: "scattergl", mode: "lines", x, y, name, line: { color, width: 1.5, ...l }, ...o });
+const line = (x, y, name, color, { line: l = {}, ...o } = {}) => ({ type: "scattergl", mode: "lines", x, y, name, line: { color, width: 1.5, ...l }, hoverlabel: { namelength: -1 }, ...o });
 
 // ---------- time-series tabs (zoom → refetch at full resolution) ----------
 const TS = {
@@ -262,7 +263,7 @@ async function renderNoise() {
   SH.forEach((i, c) => {
     const a = d.axes[i], s = xs(c), sb = c + 1 + nC;
     tr.push(line(fx, cut(a.raw), "gyro raw", css("--muted"), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, legendgroup: "raw", showlegend: !c }));
-    tr.push(line(fx, cut(a.filt), `gyro filtered · ${AX[i]}`, axc(i), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}` }));
+    tr.push(line(fx, cut(a.filt), `gyro filtered · ${AX[i]}`, axc(i), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, line: { width: 2.4 } }));
     if (on("dpsd") && a.dterm) tr.push(line(fx, cut(a.dterm), `D-term · ${AX[i]}`, axc(i), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, line: { dash: "dot", width: 1.2 } }));
     for (const k of present) if (on(k)) {
       const [c, dash] = FSTYLE[k] || ["--ink", "solid"], tot = k.endsWith("total");
@@ -683,9 +684,11 @@ function powerPanel(p) {
   const total = rows.reduce((a, r) => a + r[1], 0), [tw, tlv] = size(total), mx = Math.max(1, ...rows.map(r => r[2] ? r[2][1] : r[1]));
   const SMP = p.samples || {};
   const cap = { twitch: "1 s of one motor, sticks still", buzz: "0.15 s zoom of the same motor", uneven: "3 s of steady flight, all motors" };
+  const HW = S.profile && S.profile.derived && S.profile.derived.hover_w, KG = S.profile && S.profile.used.auw_kg;
+  const watts = v => HW ? ` <small class="hint">≈${(v / 100 * HW).toFixed(v / 100 * HW < 1 ? 2 : 1)} W</small>` : "";
   const row = ([h, v, rg, c, key, what, fix]) => { const [w, lv] = size(v);
     return `<div class="prow3 lv-${lv} ${SMP[key] ? "hasm" : ""}"><div class="ph3"><b>${h}</b><span class="badge lv-${lv}">${w}</span></div>
-      <div class="ptrack"><i style="width:${Math.max(1, v / mx * 100)}%;background:${css(c)}"></i></div><div class="pv3">${v.toFixed(v < 1 ? 2 : 1)}%</div>
+      <div class="ptrack"><i style="width:${Math.max(1, v / mx * 100)}%;background:${css(c)}"></i></div><div class="pv3">${v.toFixed(v < 1 ? 2 : 1)}%${watts(v)}</div>
       <div class="pt3">${what} <span class="hint">${fix}</span></div>
       ${SMP[key] ? `<div class="pm3"><div class="pmini" id="pm_${key}"></div><div class="pmcap hint">${cap[key]} · <span class="optk">━ battery-optimal</span> · shaded = wasted</div></div>` : ""}</div>`; };
   const tech = `${e ? `Electrical model fitted to this flight: duty = speed/${e.full_hz.toFixed(0)} Hz + resistive term (R² ${e.r2}); resistive share at hover ${(e.ir * 100).toFixed(0)}%. ` : ""}`
@@ -694,7 +697,7 @@ function powerPanel(p) {
     + `${p.sat_hi > 0.05 ? ` A motor was at 100% for ${p.sat_hi.toFixed(1)}% of the time.` : ""} No current sensor needed: everything comes from motor commands and eRPM.`;
   return `<section class="pwr pwr2" id="hpwr">
     <div class="phead lv-${tlv}"><span class="pic">🔋</span><div><div class="pbig">About <b>${total.toFixed(1)}%</b> of the battery is wasted <span class="badge lv-${tlv}">${tw}</span></div>
-      <div class="hint">Energy that turns into heat instead of keeping the quad in the air, measured while the sticks were still. ${total < 1.5 ? "Nothing to chase here." : "This is the part you can win back."}</div></div>
+      <div class="hint">Energy that turns into heat instead of keeping the quad in the air, measured while the sticks were still.${HW ? ` At ${Math.round(KG * 1000)} g this quad needs ≈${HW} W to hover, so that's <b>≈${(total / 100 * HW).toFixed(1)} W</b> of heat <span data-tip="auw">(weight: Quad profile)</span>.` : ""} ${total < 1.5 ? "Nothing to chase here." : "This is the part you can win back."}</div></div>
       <div class="pfacts">${p.tw ? `<span data-tip="pw_tw"><b>${p.tw.toFixed(1)}×</b> more thrust than its weight${p.max_how === "extrapolated" ? " (estimated)" : ""}</span>` : ""}
         <span data-tip="pw_hover">hovers at <b>${p.hover_cmd.toFixed(0)}%</b> motor command</span></div></div>
     <div class="prows">${rows.map(row).join("")}</div>
@@ -959,7 +962,8 @@ async function renderSummary() {
     <div class="propedit"><label class="ctl">Prop size <input id="pIn" type="number" min="1" max="15" step="0.5" value="${u.inch}">″</label>
       <span class="seg" id="pBl">${[2, 3, 4].map(b => `<button data-v="${b}" class="${b === u.blades ? "on" : ""}">${b}-blade</button>`).join("")}</span>
       <button class="btn sm" id="pUse">${S.prop ? "Update" : "Confirm"}</button>${S.prop ? `<button class="btn sm ghost" id="pReset">Use estimate</button>` : ""}</div>
-    <details ${S.prop ? "" : "open"}><summary class="hint">How it was estimated</summary><ul class="ev">${(e.evidence || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul></details>`;
+    <details ${S.prop ? "" : "open"}><summary class="hint">How it was estimated</summary><ul class="ev">${(e.evidence || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul></details>
+    ${auwHTML()}`;
   const vd = { Good: "good", OK: "warning", "Needs work": "serious", "Low confidence": "info" };
   const stepTbl = [0, 1, 2].map(i => { const r = st[i]; if (!r || !r.metrics) return `<tr><td>${AX[i]}</td><td colspan="4" class="hint">not enough stick input</td></tr>`;
     const m = r.metrics, ok = !r.reliability || r.reliability.ok, cl = ok ? "" : ` class="hint" title="not reliable: ${esc((r.reliability.why || []).join("; "))}"`;
@@ -1018,6 +1022,7 @@ async function renderSummary() {
   $("pBl").onclick = ev => { const v = ev.target.dataset.v; if (!v) return; bl = +v; [...$("pBl").children].forEach(b => b.classList.toggle("on", b.dataset.v === v)); };
   $("pUse").onclick = () => setProp({ inch: +$("pIn").value, blades: bl });
   if ($("pReset")) $("pReset").onclick = () => setProp(null);
+  bindAuw();
   // mini charts
   const mcfg = { staticPlot: false, displayModeBar: false, responsive: true };
   const mini = (extra = {}) => { const L = base({ margin: { l: 34, r: 6, t: 6, b: 24 }, showlegend: false, hovermode: "x unified", ...extra }); delete L._ax; L.xaxis.tickfont = L.yaxis.tickfont = { size: 9 }; return L; };
@@ -1171,7 +1176,7 @@ async function loadLog() {
   stopDemo(); S.simAck = null;
   S.range = null; S.meta = null; S.clim = null; S.fr = null; S.nfr = null; setRangeLabel(); Plotly.purge("main"); S._anShown = null;
   S.meta = await busy(() => api("meta"), "Opening the log");
-  S.prop = store.get("prop:" + propKey(), null);
+  S.prop = store.get("prop:" + propKey(), null); S.auw = store.get("auw:" + propKey(), null);
   renderSide(S.meta);
   setupPlayer();
   await renderOverview();
@@ -1185,7 +1190,32 @@ async function loadProfile() {
   const u = S.profile.used, e = S.profile.estimate, chip = $("propChip");
   chip.hidden = false;
   chip.classList.toggle("warn", !S.prop && e.needs_confirm);
-  chip.innerHTML = `Props <b>${u.inch}″ × ${u.blades}</b> ${S.prop ? "✓" : e.needs_confirm ? "<span class='q'>est. — confirm?</span>" : "est."}`;
+  chip.innerHTML = `Props <b>${u.inch}″ × ${u.blades}</b> ${S.prop ? "✓" : e.needs_confirm ? "<span class='q'>est. — confirm?</span>" : "est."} · <b>${Math.round(u.auw_kg * 1000)} g</b>${S.auw ? " ✓" : ""}`;
+}
+// ---------- all-up weight: estimated from what the log shows, the user can set it like the prop size ----------
+function auwHTML() {
+  const P = S.profile; if (!P || !P.auw) return "";
+  const a = P.auw, u = P.used, D = P.derived || {}, g = Math.round(u.auw_kg * 1000);
+  const conf = S.auw ? "set by you" : `estimated · ${a.confidence} confidence · range ${Math.round(a.range[0] * 1000)}–${Math.round(a.range[1] * 1000)} g`;
+  const der = [D.hover_w != null ? `<div class="kv"><span data-tip="auw_hoverw">hover power</span><b>≈${D.hover_w} W</b></div>` : "",
+    D.twr != null ? `<div class="kv"><span data-tip="auw_twr">max thrust / weight${D.twr_how === "extrapolated" ? " (est.)" : ""}</span><b>${D.twr}×</b></div>` : "",
+    D.thrust_g != null ? `<div class="kv"><span data-tip="auw_twr">max thrust per motor</span><b>≈${D.thrust_g} g</b></div>` : ""].join("");
+  return `<div class="auwbox"><div class="auwhead"><span class="tl" data-tip="auw">All-up weight (this flight)</span><div class="propbig">${g} <small>g</small></div><div class="hint">${conf}</div></div>
+    <div class="propedit"><label class="ctl">AUW <input id="aIn" type="number" min="20" max="5000" step="5" value="${g}"> g</label>
+      <button class="btn sm" id="aUse">${S.auw ? "Update" : "Set"}</button>${S.auw ? `<button class="btn sm ghost" id="aReset">Use estimate</button>` : ""}</div>
+    ${der}
+    <details><summary class="hint">How it was estimated · where it is used</summary><ul class="ev">${(a.evidence || []).map(x => `<li>${esc(x)}</li>`).join("")}
+      <li>Used for: hover power and battery waste in watts (Motor health), the "typical quad" comparison in the PID simulator, and the thrust numbers here.</li></ul></details></div>`;
+}
+function bindAuw() {
+  if (!$("aUse")) return;
+  $("aUse").onclick = () => { const v = +$("aIn").value; if (v >= 20 && v <= 5000) setAuw(v / 1000); };
+  $("aIn").onkeydown = e => { if (e.key === "Enter") $("aUse").click(); };
+  if ($("aReset")) $("aReset").onclick = () => setAuw(null);
+}
+async function setAuw(kg) {
+  S.auw = kg; store.set("auw:" + propKey(), kg);
+  await loadProfile(); render();
 }
 $("propChip").onclick = () => { const b = document.querySelector('#tabs [data-tab="summary"]'); if (S.tab !== "summary") b.click(); setTimeout(() => $("profileCard") && $("profileCard").scrollIntoView({ behavior: "smooth", block: "center" }), 400); };
 async function setProp(v) {

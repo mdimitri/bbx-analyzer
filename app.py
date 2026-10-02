@@ -102,8 +102,8 @@ def noise(name: str, idx: int, t0: float = None, t1: float = None, res_prom: flo
 
 
 @app.get("/api/{name}/{idx}/profile")
-def profile(name: str, idx: int, prop: float = None, blades: int = None):
-    return get(name, idx).profile(prop, blades)
+def profile(name: str, idx: int, prop: float = None, blades: int = None, auw: float = None):
+    return get(name, idx).profile(prop, blades, auw)
 
 
 @app.get("/api/{name}/{idx}/resonances")
@@ -137,8 +137,8 @@ def filterplan(name: str, idx: int, t0: float = None, t1: float = None, prom: fl
 
 
 @app.get("/api/{name}/{idx}/simmodel")
-def simmodel(name: str, idx: int, prop: float = None, blades: int = None):
-    return get(name, idx).simmodel(prop, blades)
+def simmodel(name: str, idx: int, prop: float = None, blades: int = None, auw: float = None):
+    return get(name, idx).simmodel(prop, blades, auw)
 
 
 @app.get("/api/{name}/{idx}/{kind}")

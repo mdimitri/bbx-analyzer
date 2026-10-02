@@ -408,17 +408,9 @@ def motor_power(lg, sl):
     cb = np.array([_band(m, fs, 80, None) for m in M])
     buzz = float(np.sqrt(np.mean((cb ** 2)[:, ok])))
     mc = M.mean(0)
-    full = ok & (M.min(0) >= 97)
-    if full.sum() >= max(10, 0.02 * fs):
-        w_max, how = float(np.percentile(wm[full], 90)), "seen"
-    elif mc[ok].max() >= 85:
-        sel = ok & (mc > 10)
-        p = np.polyfit(mc[sel], wm[sel], 2)
-        w_max, how = float(np.polyval(p, 100)), "extrapolated"
-        if not (w_h < w_max < 4 * w_h):
-            w_max, how = None, None
-    else:
-        w_max, how = None, None
+    import quad
+    hr = quad.headroom(lg)          # a property of the craft: whole flight, the same number the Quad profile shows
+    w_max, how = hr["max_hz"], hr["how"]
     air = thr > 8
     sat_hi = float(np.mean(M[:, air].max(0) >= 99.5)) if air.any() else 0.0
     try:
@@ -428,8 +420,8 @@ def motor_power(lg, sl):
     except Exception:
         samples = None
     return {"total": round(tot * 100, 2), "parts": {k: round(v * 100, 3) for k, v in parts.items()}, "elec": elec,
-            "buzz": round(buzz, 2), "hover_hz": round(w_h, 1), "max_hz": None if w_max is None else round(w_max, 1), "max_how": how,
-            "tw": None if w_max is None else round((w_max / w_h) ** 2, 2), "hover_cmd": round(float(np.median(mc[calm])), 1),
+            "buzz": round(buzz, 2), "hover_hz": quad.estimate_cached(lg).get("hover_hz") or round(w_h, 1), "max_hz": None if w_max is None else round(w_max, 1), "max_how": how,
+            "tw": hr["tw"], "hover_cmd": quad.estimate_cached(lg).get("hover_cmd") or round(float(np.median(mc[calm])), 1),
             "sat_hi": round(sat_hi * 100, 2), "cover": round(float(ok.mean()) * 100, 1), "samples": samples}
 
 

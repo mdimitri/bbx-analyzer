@@ -284,16 +284,22 @@ class Log:
         names = list(chans)
         return names, n, nm, np.stack([chans[k] for k in names]).astype(np.float32).tobytes()
 
-    def profile(self, prop=None, blades=None):
-        """Prop estimate (cached) + the size actually used (user value wins) + size-dependent reference values."""
+    def profile(self, prop=None, blades=None, auw=None):
+        """Prop estimate (cached) + the size actually used (user value wins) + size-dependent reference values, and the
+        all-up weight for this flight (estimated from the size, hover speed and current sensor; user value wins)."""
         import quad
-        if not hasattr(self, "_est"):
-            self._est = quad.estimate(self)
-        e = self._est
+        e = quad.estimate_cached(self)
         inch = prop or e.get("inch") or 5.0
         bl = int(blades or e.get("blades") or 3)
         sp = quad.size_params(inch, bl)
-        return {"estimate": e, "used": {"inch": inch, "blades": bl, "source": "user" if prop else "estimate"}, "params": sp,
+        ak = (inch, bl, bool(prop))
+        if getattr(self, "_auw", (None, None))[0] != ak:
+            self._auw = (ak, quad.auw_estimate(self, e, inch, bl, "user" if prop else "estimate"))
+        aw = self._auw[1]
+        kg = float(auw) if auw else aw["kg"]
+        return {"estimate": e, "used": {"inch": inch, "blades": bl, "source": "user" if prop else "estimate",
+                                        "auw_kg": round(kg, 3), "auw_source": "user" if auw else "estimate"},
+                "auw": aw, "derived": quad.derived(self, e, inch, kg), "params": sp,
                 "compare": quad.compare_settings(self.headers, sp)}
 
     def motors(self, t0=None, t1=None, thr_min=0.0, thr_max=100.0):
@@ -309,13 +315,14 @@ class Log:
         fn = {"pidterms": flight.pid_report, "motorout": flight.motor_out_report, "propwash": flight.propwash_report}[kind]
         return fn(self, t0, t1, prof=self.profile(prop, blades), **(kw if kind == "propwash" else {}))
 
-    def simmodel(self, prop=None, blades=None):
-        """Identified closed-loop model for the PID simulator (slow: cached per prop size)."""
+    def simmodel(self, prop=None, blades=None, auw=None):
+        """Identified closed-loop model for the PID simulator (slow: cached per prop size), plus how it compares with a
+        typical quad of that prop size (cheap: recomputed for the weight in use)."""
         import sim
         key = (prop, blades)
         if getattr(self, "_sim", (None, None))[0] != key:
             self._sim = (key, sim.model_report(self, self.profile(prop, blades)))
-        return self._sim[1]
+        return {**self._sim[1], "typical": sim.typical_report(self, self._sim[1], self.profile(prop, blades, auw))}
 
     def filterplan(self, t0=None, t1=None, prop=None, blades=None, **kw):
         from tuning import filter_plan

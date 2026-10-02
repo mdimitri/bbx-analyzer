@@ -143,6 +143,56 @@ def _spec_windows(x_by_key, idx, w):
     return {k: np.fft.rfft((v[idx] - v[idx].mean(1, keepdims=True)) * w, axis=1) for k, v in x_by_key.items()}
 
 
+def _logbands(f, fmin, fmax, n):
+    """Log-spaced bands over the FFT bins f: centre frequency and [lo, hi) bin index per band (each holds ≥ 1 bin)."""
+    df = f[1] - f[0]
+    edges = np.geomspace(max(fmin, df / 2), fmax, n + 1)
+    ib = np.clip(np.round(edges / df).astype(int), 0, len(f) - 1)
+    lo, hi = [], []
+    for a, b in zip(ib[:-1], ib[1:]):
+        b = max(b, a + 1)
+        if lo and a < hi[-1]:
+            a = hi[-1]
+            if a >= b:
+                continue          # narrower than one FFT bin and already covered
+        lo.append(a); hi.append(min(b, len(f)))
+    lo, hi = np.array(lo), np.array(hi)
+    keep = lo < hi
+    lo, hi = lo[keep], hi[keep]
+    fc = np.array([f[a:b].mean() for a, b in zip(lo, hi)])
+    return fc, lo, hi
+
+
+def _logbin(p, lo, hi):
+    c = np.concatenate([[0.0], np.cumsum(p)])
+    return (c[hi] - c[lo]) / (hi - lo)
+
+
+def _best_peak(fc, db, fmin, fmax):
+    """Most prominent true local maximum of db within [fmin, fmax].
+    Prominence: height above the higher of the two valleys reached walking down each side (within an octave, stopping
+    at higher ground), so a slope or the edge of the band is never mistaken for a peak."""
+    n = len(db)
+    best, bp = None, -np.inf
+    for k in range(1, n - 1):
+        if not (fmin <= fc[k] <= fmax) or db[k] < db[k - 1] or db[k] < db[k + 1]:
+            continue
+        valleys = []
+        for step in (-1, 1):
+            j, m = k, db[k]
+            while 0 <= j + step < n and 0.5 * fc[k] <= fc[j + step] <= 2 * fc[k] and db[j + step] <= db[k]:
+                j += step; m = min(m, db[j])
+            valleys.append(m)
+        p = db[k] - max(valleys)
+        if p > bp:
+            best, bp = k, p
+    if best is None:                       # monotonic curve: report the top of the band, zero prominence
+        idx = np.flatnonzero((fc >= fmin) & (fc <= fmax))
+        best = int(idx[np.argmax(db[idx])]) if len(idx) else 0
+        bp = 0.0
+    return int(best), float(bp)
+
+
 def pid_behaviour(lg, sl, prof=None):
     """Per axis, with the sticks still: the strongest oscillation in the tracking error and which term drives it
     (P, D or I), checked against frame resonances and motor speed; during stick moves: P/D/FF balance and how much of
@@ -166,22 +216,22 @@ def pid_behaviour(lg, sl, prof=None):
     motors = [c[f"motorHz[{i}]"][sl] for i in range(8) if f"motorHz[{i}]" in c]
     mh = float(np.median(np.mean(motors, 0)[air])) if motors and air.any() else None
     F, axes = [], {}
-    gl = np.unique(np.round(np.geomspace(max(0.5, df), fs / 2, 160) / df)).astype(int)    # log-spaced bins for the chart
-    gl = gl[gl < len(f)]
+    fc, lo, hi = _logbands(f, 0.5, fs / 2, 160)    # log-spaced bands for the chart and the peak search
     pid = lambda a: (hnum(h, f"{a}PID", 0) + [0, 0, 0])[:3]
     for ax in range(3):
         n = AXN[ax]
         sig = {k: c[f"{k}[{ax}]"][sl].astype(float) for k in ("axisP", "axisI", "axisD", "axisF") if f"{k}[{ax}]" in c}
         sig["err"] = sp[ax] - c[f"gyroADC[{ax}]"][sl].astype(float)
-        a = {"f": f[gl].round(2).tolist()}
+        a = {"f": fc.round(2).tolist()}
         if len(st_still) >= 3:
             Fq = _spec_windows(sig, st_still[:, None] + np.arange(nper), w)
             S = {k: (abs(v) ** 2).mean(0) for k, v in Fq.items()}
-            a["still"] = {k: (10 * np.log10(v[gl] + 1e-9)).round(1).tolist() for k, v in S.items()}
-            db = 10 * np.log10(S["err"] + 1e-9); base = _nanmedfilt(db, max(2, int(round(4 / df))))
-            band = (f >= 1) & (f <= min(60, fs / 4))
-            k = int(np.flatnonzero(band)[np.argmax((db - base)[band])])
-            prom = float((db - base)[k]); fk = float(f[k]); bb = slice(max(0, k - 1), k + 2)
+            # the chart and the peak search use the SAME curve: power averaged into log-spaced bands
+            Lb = {k: _logbin(v, lo, hi) for k, v in S.items()}
+            a["still"] = {k: (10 * np.log10(v + 1e-9)).round(1).tolist() for k, v in Lb.items()}
+            db = 10 * np.log10(Lb["err"] + 1e-9)
+            k, prom = _best_peak(fc, db, 1.0, min(60.0, fs / 4))
+            fk = float(fc[k]); bb = slice(lo[max(0, k - 1)], hi[min(len(fc) - 1, k + 1)])
             amp = lambda key: float(np.sqrt(S[key][bb].mean())) if key in S else 0.0
             rI, rD = amp("axisI") / max(amp("axisP"), 1e-9), amp("axisD") / max(amp("axisP"), 1e-9)
             is_res = any(abs(fk - r) <= max(1.5, 0.06 * r) for r in res)
@@ -313,8 +363,10 @@ def motor_out_report(lg, t0=None, t1=None, prof=None):
     who = [round(float(np.mean(M[m][sat] >= 99.5) * 100), 1) if sat.any() else 0.0 for m in range(nm)]
     sp = np.abs(np.array([c[f"setpoint[{a}]"][sl] for a in range(3)]))
     calm = air & (sp[:2].max(0) < 30) & (np.abs(np.gradient(thr) * fs) < 30)
-    hover_thr = float(np.median(thr[calm])) if calm.sum() > fs else None
-    hover_mot = float(np.median(M.mean(0)[calm])) if calm.sum() > fs else None
+    import quad                                   # hover is a property of the craft: the same calm stretches every tab uses
+    he = quad.estimate_cached(lg)
+    hover_thr = he.get("hover_thr") or (float(np.median(thr[calm])) if calm.sum() > fs else None)
+    hover_mot = he.get("hover_cmd") or (float(np.median(M.mean(0)[calm])) if calm.sum() > fs else None)
     noise = [round(rms(band(M[m], fs, 80)[air]), 2) for m in range(nm)]
     out = dict(sat_pct=round(float(sat.mean() * 100), 2), floor_pct=round(float(floor.mean() * 100), 2), sat_by_motor=who,
                hover_thr=None if hover_thr is None else round(hover_thr, 1), hover_motor=None if hover_mot is None else round(hover_mot, 1),

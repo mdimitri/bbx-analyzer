@@ -641,3 +641,33 @@ def _model_report(lg, prof=None):
         except OSError:
             pass
     return out
+
+
+def typical_report(lg, M, prof):
+    """Learned plant vs. a typical quad of the same prop size at the typical weight for that size, with the same motors.
+    Also what the learned roll/pitch authority implies about this quad's rotational inertia at its own weight."""
+    import quad
+    u = prof["used"]; inch, bl, kg = u["inch"], u["blades"], u["auw_kg"]
+    G = (M.get("motor") or {}).get("hz") and _motor(lg) and _motor(lg).get("G")
+    T = quad.typical_dynamics(inch, bl, G, tau_prior(inch))
+    hz = prof["estimate"].get("hover_hz")
+    out = dict(inch=inch, blades=bl, auw_kg=kg, auw_source=u["auw_source"], hover_hz=hz, G=None if not G else round(float(G), 1), t=T,
+               kg_hover=round(quad.thrust_kg(hz, inch, bl), 3) if hz else None)
+    if T is None:
+        out["why"] = "No eRPM telemetry: the motor drive can't be measured, so a size-typical authority can't be worked out."
+        return out
+    ax = M["axes"]
+    rows = {}
+    for a in AXN:
+        r = ax.get(a)
+        if not r:
+            continue
+        bt = T["b_yaw"] if a == "yaw" else T["b_rp"]
+        rows[a] = dict(b=round(r["b"], 1), b_typ=bt, b_ratio=round(r["b"] / bt, 2), tau_ms=r["tau_ms"], tau_typ=T["tau_ms"],
+                       tau_ratio=round(r["tau_ms"] / T["tau_ms"], 2), delay_ms=r["delay_ms"], status=r["status"])
+        if a != "yaw":
+            rows[a]["inertia_gcm2"] = quad.implied_inertia(inch, kg, out["hover_hz"], G, r["b"])
+    out["axes"] = rows
+    # same-frame inertia at this flight's weight (typical layout) for comparison with what the authority implies
+    out["inertia_typ_at_auw"] = round(kg * (quad.KAPPA * quad.arm_y(inch)) ** 2 * 1e7)
+    return out

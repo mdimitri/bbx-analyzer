@@ -274,7 +274,10 @@ async function renderPidSim() {
     for (const a of SIMAX) if (!SIMV.M.axes[a]) SIMV.M.axes[a] = null;
     SIMV.meas = await api("step", {}).catch(() => null);
     if (S.tab !== "pidsim") return;
+    SIMV.tkey = key + "|" + (S.auw || "");
   }
+  // the "typical quad" comparison depends on the weight in use: cheap to refresh (the learned model is cached)
+  if (SIMV.tkey !== key + "|" + (S.auw || "")) { const M2 = await api("simmodel"); SIMV.M.typical = M2.typical; SIMV.tkey = key + "|" + (S.auw || ""); if (S.tab !== "pidsim") return; }
   const M = SIMV.M;
   const views = [["step", "Step response"], ["impulse", "Disturbance kick"], ["replay", "Your flight replay"], ["freq", "Stability (frequency)"], ["check", "Model check"]];
   const vhint = SIMV.view === "check" ? "the model vs your flight, analysed the same way: dots = real, line = model · top: step response from your own stick moves · bottom: closed-loop response (|gyro / setpoint|), faded where your sticks didn't excite that frequency"
@@ -307,6 +310,7 @@ function simPanel() {
     <table class="cmp simmodel"><tr><th></th><th data-tip="sim_b">authority</th><th data-tip="sim_tau">motor lag</th><th data-tip="sim_delay">delay</th><th data-tip="sim_a">damping</th><th data-tip="sim_lam">λ</th><th data-tip="sim_fit">fit</th></tr>${model}</table>
     <div class="hint">${mot} The logged sticks drive this model with your current PIDs; the fit is how closely it reproduces the logged gyro (below ${M.fit_hz || 30} Hz) on the stick-active pieces.</div>
     ${notes ? `<ul class="hint simnotes">${notes}</ul>` : ""}
+    ${typicalHTML(M.typical)}
     <div class="fh" data-tip="pid_sug">Try new PIDs</div>
     <table class="pidt gtab"><tr><th></th>${keys.map(k => `<th data-tip="${k}">${k}</th>`).join("")}</tr>${rows}</table>
     <div class="simf"><label class="ctl" data-tip="sim_gmul">Gyro LPF × <input id="simG" type="range" min="0.5" max="2" step="0.05" value="${SIMV.gmul}"><b id="simGv">${SIMV.gmul.toFixed(2)}</b></label>
@@ -422,4 +426,33 @@ async function simRun() {
   $("simOut").innerHTML = `<div class="fh">Current → your edits</div>${tbl}` + (lowc.length ? `<div class="hint" style="color:var(--warn-ink)">⚠ ${lowc.join(", ")}: the model fits the flight poorly, so treat those predictions as rough. Log a flight with more flips and rolls.</div>` : "") +
     findingsHTML(ver, `<div class="fh">Prediction</div>`);
   if (typeof fitSide === "function") fitSide();
+}
+
+// ---- learned dynamics vs a typical quad of the same prop size (typical weight for that size, same motors) ----
+function typicalHTML(T) {
+  if (!T) return "";
+  if (!T.t) return `<div class="fh" data-tip="sim_typ">Compared with a typical ${T.inch}″ quad</div><div class="hint">${esc(T.why || "")}</div>`;
+  const t = T.t, g = kg => `${Math.round(kg * 1000)} g`;
+  const rel = (r, hi, lo) => r >= 1.25 ? hi : r <= 0.8 ? lo : "about typical";
+  const pill = r => `<span class="badge lv-${Math.abs(Math.log(r)) < Math.log(1.25) ? "good" : "info"}">${r.toFixed(1)}×</span>`;
+  const rows = SIMAX.map((a, i) => { const r = T.axes && T.axes[a]; if (!r) return "";
+    const unsure = r.status !== "ok" ? ` <span class="hint">(${r.status === "borrowed" ? "borrowed" : "not learned"})</span>` : "";
+    return `<tr><td><span class="sw" style="background:${axc(i)}"></span>${AX[i]}${unsure}</td>
+      <td>${r.b.toFixed(0)}<small> / ${r.b_typ.toFixed(0)}</small> ${pill(r.b_ratio)}</td>
+      <td>${r.tau_ms.toFixed(0)}<small> / ${r.tau_typ.toFixed(0)} ms</small> ${pill(r.tau_ratio)}</td>
+      <td>${r.delay_ms.toFixed(1)}<small> / ${t.delay_ms[0]}–${t.delay_ms[1]}</small></td></tr>`; }).join("");
+  const rp = ["roll", "pitch"].map(a => T.axes && T.axes[a]).filter(r => r && r.status === "ok");
+  const bR = rp.length ? rp.reduce((s, r) => s + Math.log(r.b_ratio), 0) / rp.length : null, tR = rp.length ? rp.reduce((s, r) => s + Math.log(r.tau_ratio), 0) / rp.length : null;
+  const inr = rp.map(r => r.inertia_gcm2).filter(Boolean), inrR = inr.length ? inr.reduce((a, b) => a + b, 0) / inr.length / T.inertia_typ_at_auw : null;
+  const says = [];
+  if (bR != null) says.push(`Roll/pitch authority is <b>${rel(Math.exp(bR), "higher than typical", "lower than typical")}</b> (${Math.exp(bR).toFixed(2)}×): ${Math.exp(bR) >= 1.25 ? `the same PIDs act stronger on this quad, so it needs <b>less P and D</b> than a typical ${T.inch}″ tune` : Math.exp(bR) <= 0.8 ? `the same PIDs act weaker, so it needs <b>more P and D</b> than a typical ${T.inch}″ tune` : `a typical ${T.inch}″ tune is a fair starting point`}.`);
+  if (T.hover_hz && t.hover_hz) { const kh = T.kg_hover, off = kh ? T.auw_kg / kh : 1, slow = T.hover_hz < t.hover_hz;
+    says.push(`It hovers at ${T.hover_hz.toFixed(0)} Hz motor speed vs ≈${t.hover_hz.toFixed(0)} Hz for a typical ${g(t.kg)} ${T.inch}″ (${slow ? "lighter for its props: more authority" : "heavier for its props: less authority"}).`
+      + (kh ? (Math.abs(Math.log(off)) < Math.log(1.3) ? ` That hover speed matches the ${g(T.auw_kg)} all-up weight${T.auw_source === "user" ? " you set" : ""}.`
+        : ` <b>That hover speed points to ≈${g(kh)} on ${T.inch}″ ${T.blades}-blade props, not the ${g(T.auw_kg)}${T.auw_source === "user" ? " you set" : " in use"}</b>: check the weight, or the prop size and blade count in the Quad profile (props with unusual pitch also shift this by about ±30%).`) : "")); }
+  if (tR != null) says.push(`Motors respond ${Math.exp(tR) <= 0.8 ? "<b>faster</b> than" : Math.exp(tR) >= 1.25 ? "<b>slower</b> than" : "about as fast as"} typical ${T.inch}″ ones (${Math.exp(tR).toFixed(2)}× the lag)${Math.exp(tR) >= 1.25 ? ": heavier props or low motor speed; it limits how much P and D can go up" : Math.exp(tR) <= 0.8 ? ": it leaves room for a tighter tune" : ""}.`);
+  if (inrR != null) says.push(`At ${g(T.auw_kg)}, the learned authority implies ${inrR >= 1.3 ? "<b>more</b> rotational inertia than" : inrR <= 0.75 ? "<b>less</b> rotational inertia than" : "about the rotational inertia of"} a typical layout of that weight (${inrR.toFixed(2)}×)${inrR >= 1.3 ? ": mass far from the centre (battery or camera out front/top, long arms)" : inrR <= 0.75 ? ": mass packed near the centre, or the weight is set too high" : ""}.`);
+  return `<div class="fh" data-tip="sim_typ">Compared with a typical ${T.inch}″ ${T.blades}-blade quad (${g(t.kg)}, ${t.wheelbase_mm} mm, same motors)</div>
+    <table class="cmp simmodel simtyp"><tr><th></th><th data-tip="sim_b">authority <small>yours / typ.</small></th><th data-tip="sim_tau">motor lag</th><th data-tip="sim_delay">delay, ms</th></tr>${rows}</table>
+    <ul class="hint simnotes">${says.map(x => `<li>${x}</li>`).join("")}</ul>`;
 }
