@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>BBX Analyzer · Betaflight blackbox logs, turned into answers</title>
+<link rel="icon" type="image/svg+xml" href="/static/brand/icon.svg">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/brand/icon-32.png">
+<link rel="apple-touch-icon" href="/static/brand/icon-180.png">
+<meta name="theme-color" content="#0d0d0d">
+<script>document.documentElement.dataset.theme = (() => { try { return JSON.parse(localStorage.getItem("bbx.theme")); } catch (e) {} })() || "dark";</script>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/vendor/plotly.min.js"></script>
+</head>
+<body>
+<header class="bar">
+  <div class="brand"><img src="/static/brand/icon.svg" alt="" width="26" height="26"><span class="bn">bbx</span><small>analyzer</small></div>
+  <select id="file" title="Log file"></select>
+  <select id="sub" title="Sub-log"></select>
+  <label class="btn">Upload<input id="up" type="file" accept=".bbl,.bfl,.txt" hidden></label>
+  <span class="grow"></span>
+  <span id="range" class="range"></span>
+  <button id="reset" class="btn ghost" hidden>Full log</button>
+  <button id="propChip" class="btn propchip" data-tip="prop_chip" hidden></button>
+  <button id="aboutBtn" class="btn ghost" title="About BBX">About</button>
+  <button id="theme" class="btn ghost" title="Toggle theme">◐</button>
+</header>
+
+<main class="layout">
+  <aside class="side" id="side">
+    <div class="card sidepanel">
+      <div class="sidehead"><h3>Flight &amp; craft</h3><button id="sideToggle" class="btn sm ghost" title="Collapse this panel to the left">«</button></div>
+      <section class="sub summary" id="summary"><h3>Flight summary</h3><div id="sumline" class="sumline"></div></section>
+      <section id="craft" class="sub"></section>
+      <section class="sub"><h3>PID</h3><table id="pids"></table></section>
+      <section class="sub"><h3>Settings</h3><dl id="settings"></dl></section>
+    </div>
+    <button id="sideOpen" class="sideopen" title="Show flight summary, craft &amp; settings" hidden><span>»</span><span class="vt">Flight &amp; craft</span></button>
+  </aside>
+
+  <section class="content">
+    <nav class="tabs" id="tabs">
+      <button data-tab="summary" data-tip="tab_summary" class="on">Summary</button>
+      <button data-tab="tracking" data-tip="tab_tracking">Tracking</button>
+      <button data-tab="pid" data-tip="tab_pid">PID terms</button>
+      <button data-tab="motors" data-tip="tab_motors">Motors</button>
+      <button data-tab="noise" data-tip="tab_noise">Noise</button>
+      <button data-tab="spectro" data-tip="tab_spectro">Spectrogram</button>
+      <button data-tab="step" data-tip="tab_step">Step response</button>
+      <button data-tab="propwash" data-tip="tab_propwash">Propwash</button>
+      <button data-tab="pidsim" data-tip="tab_sim">PID simulator</button>
+      <button data-tab="health" data-tip="tab_health">Motor health</button>
+      <span class="grow"></span>
+      <button id="fbadge" class="fbadge" hidden data-tip="fbadge"></button>
+      <button id="tipsBtn" class="btn sm ghost tipsbtn">💡 Tips</button>
+    </nav>
+    <div class="card pad0 maincard">
+      <div id="tips" class="tips" hidden></div>
+      <div class="cardhead" id="controls"></div>
+      <div id="viewer" hidden></div>
+      <div id="dash" class="dashgrid" hidden></div>
+      <div id="main" class="plot" style="height:620px"></div>
+      <div id="findings" class="findings"></div>
+    </div>
+    <div class="card pad0 dock" id="dock">
+      <div id="dockGrip" class="dockgrip" title="Drag to make the timeline taller or shorter (double-click resets)"><i></i></div>
+      <div id="player" class="player"></div>
+    </div>
+  </section>
+</main>
+<div id="drop" class="drop" hidden>Drop .BBL to upload</div>
+<div id="busy" class="busy" hidden role="status" aria-live="polite"><span class="spin"></span><div class="btxt"><div class="bhead"><b id="busyT">Working…</b><em id="busyP"></em></div>
+  <div id="busyD" class="hint"></div><div class="bbar"><i id="busyBar" class="ind"></i></div></div></div>
+<div id="tip" hidden></div>
+<script src="/static/glossary.js"></script>
+<script src="/static/app.js"></script>
+<script src="/static/player.js"></script>
+<script src="/static/timesync.js"></script>
+<script src="/static/video.js"></script>
+<script src="/static/demo.js"></script>
+<script src="/static/pidsim.js"></script>
+<script src="/static/planner.js"></script>
+<script src="/static/behaviour.js"></script>
+<script src="/static/about.js"></script>
+</body>
+</html>

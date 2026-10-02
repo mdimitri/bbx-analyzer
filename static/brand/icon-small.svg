@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- BBX Analyzer mark: a quad seen from above (X frame, four prop discs) with a step-response trace through it -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b2029"/><stop offset="1" stop-color="#0c0e13"/></linearGradient>
+  </defs>
+  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#bg)"/>
+  <rect x="8.5" y="8.5" width="239" height="239" rx="55.5" fill="none" stroke="#ffffff" stroke-opacity=".08"/>
+  <g fill="#3987e5" fill-opacity=".14" stroke="#3987e5" stroke-width="13">
+    <circle cx="74" cy="74" r="36"/><circle cx="182" cy="74" r="36"/><circle cx="74" cy="182" r="36"/><circle cx="182" cy="182" r="36"/>
+  </g>
+  <g stroke="#e8ecf2" stroke-width="22" stroke-linecap="round">
+    <path d="M74 74 L182 182 M182 74 L74 182"/>
+  </g>
+  <g fill="#e8ecf2"><circle cx="74" cy="74" r="10"/><circle cx="182" cy="74" r="10"/><circle cx="74" cy="182" r="10"/><circle cx="182" cy="182" r="10"/></g>
+  <rect x="106" y="110" width="44" height="36" rx="9" fill="#e8ecf2"/>
+</svg>

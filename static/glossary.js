@@ -1,0 +1,286 @@
+// Tooltip texts. t = title · tl = one-line TL;DR · d = how it works (plain words, still exact) · g = rule of thumb (optional).
+// Keys match header names, stat keys, tab ids and chart concepts. Edit freely.
+const GLOSSARY = {
+  // ---- stats ----
+  duration_s: { t: "Duration", tl: "How long this recording lasts.", d: "Time from the first to the last logged sample. One .BBL file can hold several recordings, one per arm → disarm." },
+  log_rate_hz: { t: "Log rate", tl: "How many samples per second were saved.", d: "The highest frequency you can see in any spectrum is half of this (the Nyquist limit). Anything faster is invisible, and can even fold back and show up as a fake lower frequency (aliasing).", g: "1 kHz is fine for tuning; use 2–4 kHz for a flight dedicated to filter work." },
+  avg_throttle: { t: "Average throttle", tl: "Mean throttle stick position over the log.", d: "Motor noise frequency rises with throttle (faster motors → higher pitch), which is why many charts are plotted against throttle." },
+  max_rate: { t: "Max rotation rate", tl: "The fastest the quad turned, on any axis.", d: "Peak gyro reading in degrees per second. Compare it with your rate profile to see how much of it you actually use." },
+  motor_sat: { t: "Motor saturation", tl: "How often a motor was maxed out at 100%.", d: "When a motor is maxed out, the flight controller can't make the correction it wants, so control briefly degrades (typically wobble on punch-outs).", g: "Under 0.5% is normal. A few % means too little headroom: gains or rates too high, or the quad is underpowered." },
+  frames: { t: "Frames", tl: "Number of saved samples.", d: "Each frame is one snapshot of every logged value (gyro, PID terms, motors…)." },
+
+  // ---- PID table ----
+  P: { t: "P — proportional", tl: "Pushes back harder the further you are from the target.", d: "Output = P gain × error (target rate − measured rate). It gives stiffness and precision.", g: "Too high: fast oscillation and overshoot. Too low: soft, floaty, slow to follow sticks." },
+  I: { t: "I — integral", tl: "Fixes errors that don't go away on their own.", d: "Adds up the error over time, so it slowly builds a correction for steady disturbances: off-centre battery, wind, one weaker motor.", g: "Too low: drifts in turns, poor attitude hold. Too high: slow wobble, bounce-back after flips." },
+  D: { t: "D — derivative (damping)", tl: "Brakes the motion so it doesn't overshoot.", d: "Reacts to how fast the rotation is changing, like a shock absorber. The catch: taking a derivative amplifies high-frequency noise (+20 dB per decade), so D is the main way gyro noise reaches the motors and heats them.", g: "More D = less overshoot and propwash, but warmer motors. Check motor temperature after changing it." },
+  Dmax: { t: "D max", tl: "Extra D, only during fast moves.", d: "D rises from its base value toward D max when you flip or snap, and stays low in smooth flight. You get damping when it matters and less noise the rest of the time. 0 disables it." },
+  FF: { t: "FF — feedforward", tl: "Reacts to your stick movement directly.", d: "Adds a push proportional to how fast you move the stick, before any error has built up, so the quad follows sticks sharply without raising P. It also amplifies radio-link jitter.", g: "Too much: small overshoot at the start of flicks. Too little: sticks feel slightly delayed." },
+
+  // ---- loop ----
+  looptime: { t: "Gyro loop time", tl: "Time between gyro readings (µs).", d: "125 µs means 8,000 readings per second. The gyro filters run at this rate." },
+  pid_process_denom: { t: "PID loop divider", tl: "PID loop rate = gyro rate ÷ this.", d: "Example: 8 kHz ÷ 2 = 4 kHz. The PID controller, D-term filters and RPM filter run at the PID rate." },
+  "P interval": { t: "Logging divider", tl: "Save one sample every N PID loops.", d: "A bigger N means a smaller file but a lower log rate, so less of the spectrum is visible." },
+
+  // ---- rates ----
+  rates_type: { t: "Rates type", tl: "Which formula turns stick position into rotation speed.", d: "Betaflight, Raceflight, KISS, Actual or Quick. With Actual rates: centre sensitivity, max rate and expo are set directly." },
+  rc_rates: { t: "RC rate", tl: "Stick sensitivity around centre.", d: "What it means depends on the rates type. With Actual rates: centre sensitivity in tens of °/s (1 → 100 °/s at full stick, near centre)." },
+  rates: { t: "Rates", tl: "Maximum rotation speed (or curve shape).", d: "With Actual rates: max rate ÷ 10 (85 → 850 °/s). With Betaflight rates: the \"super rate\" that steepens the curve toward full stick." },
+  rc_expo: { t: "RC expo", tl: "Softens the centre of the stick.", d: "Makes small stick movements gentler for fine control, without changing the maximum rate." },
+
+  // ---- gyro filters ----
+  gyro_lpf1_type: { t: "Gyro low-pass 1 type", tl: "Shape of the first gyro filter.", d: "PT1 is gentle and adds the least delay. PT2 and PT3 are several PT1s in a row: they cut noise more steeply but add more delay. BIQUAD is steep but can ring. Betaflight adjusts PT2/PT3 so all types reach −3 dB at the set frequency." },
+  gyro_lpf1_static_hz: { t: "Gyro low-pass 1, fixed cutoff", tl: "Fixed cutoff frequency (0 = off or dynamic).", d: "Above the cutoff, noise is progressively reduced. Used only when the dynamic mode is off." },
+  gyro_lpf1_dyn_hz: { t: "Gyro low-pass 1, dynamic range", tl: "The cutoff moves from min to max with throttle.", d: "Motor noise gets higher-pitched as throttle rises, so the filter can open up: strong filtering (more delay) at low throttle, lighter filtering (less delay) at high throttle." },
+  gyro_lpf2_type: { t: "Gyro low-pass 2 type", tl: "Shape of the second gyro filter.", d: "Usually a PT1 at a high frequency, catching the fastest noise with very little delay." },
+  gyro_lpf2_static_hz: { t: "Gyro low-pass 2 cutoff", tl: "Second gyro filter, fixed frequency.", d: "Often 500 Hz or more. Small cost in delay, cleans up very-high-frequency noise." },
+  gyro_notch_hz: { t: "Gyro static notches", tl: "Fixed notch filters (0 = off).", d: "A notch removes one narrow frequency band. Fixed notches suit a known, stable frame resonance; the dynamic notch and RPM filter have mostly replaced them." },
+  simplified_gyro_filter_multiplier: { t: "Gyro filter slider", tl: "Moves all gyro low-pass cutoffs together (%).", d: "Higher = less filtering: less delay and a sharper feel, but more noise gets through.", g: "100 = default. Raise in small steps (10–20) and check motor temperature." },
+
+  // ---- D-term filters ----
+  dterm_lpf1_type: { t: "D-term low-pass 1 type", tl: "Shape of the first D-term filter.", d: "Same types as the gyro filters. D needs heavier filtering because taking a derivative amplifies noise." },
+  dterm_lpf1_static_hz: { t: "D-term low-pass 1, fixed cutoff", tl: "Fixed cutoff (0 = off or dynamic).", d: "Used only when the dynamic mode is off." },
+  dterm_lpf1_dyn_hz: { t: "D-term low-pass 1, dynamic range", tl: "D-term cutoff moves with throttle.", d: "Lower cutoff = cooler motors, but D reacts later, so it damps overshoot and propwash less well." },
+  dterm_lpf2_type: { t: "D-term low-pass 2 type", tl: "Shape of the second D-term filter.", d: "Usually a PT1." },
+  dterm_lpf2_static_hz: { t: "D-term low-pass 2 cutoff", tl: "Second D-term filter, fixed frequency.", d: "Extra cleanup above the first filter." },
+  dterm_notch_hz: { t: "D-term notch", tl: "Fixed notch on D (0 = off).", d: "Rarely needed when the RPM filter is active." },
+  simplified_dterm_filter_multiplier: { t: "D-term filter slider", tl: "Moves the D-term low-pass cutoffs together (%).", d: "Higher = less filtering: D reacts faster, but motors run warmer.", g: "100 = default. Change in small steps and feel motor temperature after flying." },
+
+  // ---- dynamic notch ----
+  dyn_notch_count: { t: "Dynamic notch count", tl: "How many self-tracking notches.", d: "The flight controller runs an FFT on the gyro, finds the loudest peaks between min and max Hz, and places a notch on each. Every notch adds a bit of delay.", g: "With the RPM filter on, 1 is usually enough (for a frame resonance)." },
+  dyn_notch_q: { t: "Dynamic notch Q", tl: "How narrow each notch is (÷100).", d: "Q = centre frequency ÷ notch width. High Q = narrow notch: less delay, but it can miss a moving peak. Low Q = wide notch: catches more, costs more delay." },
+  dyn_notch_min_hz: { t: "Dynamic notch minimum", tl: "Lowest frequency the notch may go to.", d: "Notches low in the spectrum add delay right where control happens, so keep this just below the lowest resonance you need to catch." },
+  dyn_notch_max_hz: { t: "Dynamic notch maximum", tl: "Highest frequency the notch may go to.", d: "Upper end of the peak search." },
+
+  // ---- RPM filter ----
+  rpm_filter_harmonics: { t: "RPM filter harmonics", tl: "Notches per motor: 1×, 2×, 3× its rotation speed.", d: "With bidirectional DShot each ESC reports its motor speed. Motor noise sits exactly at the rotation frequency and its multiples, so the RPM filter puts a notch on each of them for every motor (4 motors × 3 = 12 notches). Very precise, very little delay." },
+  rpm_filter_q: { t: "RPM filter Q", tl: "How narrow the RPM notches are (÷100).", d: "500 means Q = 5. Lower Q = wider notches: more tolerant of speed-reading lag, slightly more delay." },
+  rpm_filter_min_hz: { t: "RPM filter minimum", tl: "Below this motor speed the notches fade out.", d: "Stops the notches from sliding down into the control band at idle, where they would add delay." },
+  rpm_filter_weights: { t: "RPM filter weights", tl: "How deep each harmonic's notch is (%).", d: "100 = full notch. Lower the weight of a harmonic that is weak on your motors to save a little delay." },
+  motor_poles: { t: "Motor poles", tl: "Number of magnets in the motor bell.", d: "Needed to turn electrical RPM into real RPM: rotation Hz = eRPM ÷ (poles ÷ 2) ÷ 60. If it's wrong, every RPM notch lands on the wrong frequency.", g: "Most 5\" motors have 14. Tiny whoop motors often 12." },
+  dshot_bidir: { t: "Bidirectional DShot", tl: "ESCs report motor speed back.", d: "Required for the RPM filter, dynamic idle and motor-speed logging (and for this app's motor-health tab)." },
+
+  // ---- misc tuning ----
+  motor_idle: { t: "Motor idle", tl: "Minimum motor speed when armed (÷100 %).", d: "Keeps the props spinning fast enough to keep control during descents and flips." },
+  tpa_rate: { t: "TPA rate", tl: "How much PID gain drops at high throttle (%).", d: "Throttle PID Attenuation. At high RPM the props bite harder, so the same gain acts stronger and can oscillate; TPA lowers D (and sometimes P) above the breakpoint to compensate." },
+  tpa_breakpoint: { t: "TPA breakpoint", tl: "Throttle where TPA starts (µs, 1000–2000).", d: "Below this, gains are untouched." },
+  anti_gravity_gain: { t: "Anti-gravity", tl: "Boosts I during fast throttle changes.", d: "Quick throttle punches or chops upset the balance of the frame and make the nose dip or rise; a temporary I boost holds attitude." },
+  iterm_relax_cutoff: { t: "I-term relax cutoff", tl: "How strongly I is held back during fast moves.", d: "Stops I from building up during flips and rolls, which would cause bounce-back at the end. Lower = stronger hold-back." },
+  feedforward_boost: { t: "Feedforward boost", tl: "Extra kick at the start of a stick move.", d: "Uses how fast the stick is accelerating, to overcome motor spin-up lag. Too much gives a small overshoot at the start of flicks." },
+  thrust_linear: { t: "Thrust linearization", tl: "Makes motor response more even across throttle.", d: "Thrust grows roughly with RPM², so motors react weakly at low throttle. This boosts low-throttle output so the PID loop behaves the same everywhere." },
+  simplified_master_multiplier: { t: "Master multiplier", tl: "Scales all PID gains together (%).", d: "The simplified tuning sliders compute P, I, D and FF from a few multipliers. 100 = default." },
+
+  // ---- tabs ----
+  tab_summary: { t: "Summary", tl: "One-page tuning report: what's good, what to fix first.", d: "Collects the key results of every analysis (tune, noise and filters, frame resonances, motors) for the prop size of this quad, and lists the most important problems first. Click a card title to open its tab." },
+  prop_chip: { t: "Prop size", tl: "The single most important fact for tuning.", d: "Prop size sets how fast the quad can react, where motor noise sits and which filter settings make sense, so every analysis here scales with it. It's estimated from the log (hover motor speed plus a weight guess, and blade-pass harmonics for blade count). Confirm or correct it on the Summary tab; your value is remembered for this craft." },
+  fbadge: { t: "Findings", tl: "What this tab's analysis found, by severity.", d: "✖ fix · ⚠ check · ℹ info · ✓ good. Click to jump to the full list below the chart. The coloured dot on each tab shows its worst finding." },
+  tips_btn: { t: "Tips", tl: "How to read the current tab.", d: "Opens a short guide over the corner of the chart: what to look at, what good and bad look like, and how to use the controls." },
+  nnper: { t: "Spectrum detail", tl: "Frequency resolution of the noise spectrum.", d: "Each spectrum is averaged from slices of N samples. More samples = finer frequency detail (Δf = log rate ÷ N) but fewer slices to average, so the curve gets noisier. 512 is a good default; 2048+ separates close peaks (e.g. a resonance next to a motor line)." },
+  priorities: { t: "Top priorities", tl: "The most important things to fix, across all analyses.", d: "Every warning and problem from the Noise, Step response and Motor health analyses, most severe first. Each links to the tab with the full explanation." },
+  tab_tracking: { t: "Tracking", tl: "Does the quad do what your sticks ask?", d: "Compares the commanded rotation (setpoint, from sticks and rates) with the measured rotation (gyro). A gap = lag; a spike after a move = overshoot; ripples = oscillation." },
+  tab_pid: { t: "PID terms", tl: "What each part of the controller is doing.", d: "The P, I, D and FF outputs sent to the motor mixer. A large, fuzzy D trace means noise is going to the motors; I drifting away from zero in straight flight means an imbalance (CG, motor)." },
+  tab_motors: { t: "Motors", tl: "Motor commands and real motor speeds.", d: "Command in % of the full range, and measured rotation speed in Hz from the ESCs. Motors drifting apart point to an imbalance (CG, bent prop, weak motor)." },
+  tab_noise: { t: "Noise", tl: "Which frequencies the vibration is at, and what the filters do to it.", d: "Top: noise power by frequency for the raw and filtered gyro. Bottom: how much each filter lets through, computed from your settings. The findings below are generated from both." },
+  tab_spectro: { t: "Spectrogram", tl: "Noise by frequency, against throttle or time.", d: "Each row is a throttle band (or a moment in time); colour = how loud that frequency is. Motor noise draws diagonal lines (faster motors → higher pitch). Frame resonances draw straight vertical lines, because they don't move with RPM." },
+  tab_step: { t: "Step response", tl: "How the quad would react to an instant stick jump.", d: "Worked out from normal flying: in many short windows, the app finds the response h that best turns your stick input into the measured rotation (Wiener deconvolution), then adds it up into a step. The median of all windows is shown. 1.0 = exactly reaches the command." },
+  tab_health: { t: "Motor health", tl: "Finds a bad motor or prop from vibration, load and speed.", d: "Uses each motor's measured speed to pick out the vibration that belongs to that motor, compares how hard each motor works in steady flight, and checks that every motor spins equally fast for the same command." },
+
+  // ---- motor health ----
+  fplan: { t: "Filter planner", tl: "Try notches and low-pass changes on this flight's measured noise before flashing anything.", d: "A filter change multiplies whatever passes through it by the ratio of the new to the old filter response. So the planned filtered gyro is the measured filtered gyro × |H_new / H_now|², and the D-term likewise (D sees the gyro filters and its own). Noise reaching the motors is re-split by PID term using the measured share of P and D. RPM and dynamic notches are left as they are. Valid for the same props and flying style.", g: "Aim for the least delay that keeps motor noise low; a static notch is only worth it on a resonance the other filters miss." },
+  fp_notch: { t: "Proposed static notch", tl: "A gyro notch on a frame resonance the current filters don't remove (< 15 dB there).", d: "Centre = the resonance frequency. Width comes from the measured peak (−3 dB width in the throttle range where it shows), made 20% wider to allow for drift between flights, Q limited to 1.5–8. Betaflight sets a static notch by its centre and its lower −3 dB edge (cutoff). Up to two (gyro_notch1/2); an existing notch that catches nothing is offered for reuse." },
+  fp_manual: { t: "Manual notch", tl: "Add your own gyro notch and see its effect and delay.", d: "Pick the centre on a peak in the raw gyro. Q = centre / width: a high Q is narrow and cheap in delay but misses a peak that moves; a low Q is wide and costs more delay below its centre." },
+  pid_traces: { t: "PID term traces", tl: "P, I, D and feedforward over time, per axis.", d: "How hard each term pushes at every moment of the flight, in Betaflight's PID units (10 units ≈ 1% motor output). Use it to see which term reacts to a move, a gust or a throttle chop." },
+  pid_beh: { t: "PID behaviour", tl: "What each PID term is doing, by frequency, while the sticks are still.", d: "Spectra of P, I, D, feedforward and the tracking error over the stretches where all sticks are centred. A narrow peak in the error inside the loop range (2.5 Hz up to ~150/prop-inch Hz) is the loop ringing; if I is as strong as P at a slow peak (≤ 6 Hz), P and I are chasing each other; a peak on a resonance or motor order is vibration. D vibration = share of D above 80 Hz. During stick moves: D vs P effort (2–30 Hz) and how much of its nominal strength feedforward delivered (acro only)." },
+  motor_noise: { t: "Motor-command noise", tl: "RMS of the motor command above 80 Hz on the worst motor, % of full range.", d: "Fast command changes the props can't follow: they mostly become heat in motors and ESCs. Mostly from D (it amplifies fast changes) plus P on leftover vibration." },
+  pw_hover: { t: "Hover command", tl: "Average motor command in calm flight, and the motor speed it gives.", d: "Lower means more thrust headroom. Typical freestyle builds hover at 20–35%." },
+  pw_ir: { t: "Resistive share", tl: "How much of the voltage at hover is lost across resistance (windings, ESC, wires, battery) instead of turning into back-EMF.", d: "From the fit duty = a·speed + b·speed² on steady flight: the b·speed² part over the total at hover. It sets how expensive current swings are: the higher it is, the more every unneeded command swing heats things up rather than spinning the prop." },
+  pw_total: { t: "Extra prop power", tl: "How much more power the props draw because the motors don't all spin at the same speed.", d: "For the same total thrust, four props at unequal speeds need more power than four at the common speed (power ∝ speed³, thrust ∝ speed²). Computed from eRPM over the selected flight, only where all motors spin well (not during flips at zero throttle).", g: "Under ~1% is a well balanced craft. 2–5% is typical of a CG offset or mismatched props." },
+  pw_tune: { t: "Tune cost", tl: "The part of the extra prop power caused by fast corrections (3–80 Hz) and vibration (>80 Hz).", d: "This is what a smoother tune or better filtering could get back. It excludes the steady imbalance (mechanical) and the slow speed changes needed to fly the moves.", g: "Below 0.3% the tune isn't costing flight time." },
+  pw_buzz: { t: "Motor-command buzz", tl: "RMS of the motor command above 80 Hz, in % of full command.", d: "High-frequency command noise (mostly from D-term) can't change prop speed much, so it shows up as current ripple and heat in motors and ESCs rather than thrust. It is not included in the prop-power %.", g: "Under ~1.5% is clean. Hot motors after short flights plus high buzz → more D filtering or lower D." },
+  pw_tw: { t: "Thrust-to-weight", tl: "Full-throttle thrust divided by hover thrust.", d: "Thrust ∝ speed², so T/W ≈ (full-throttle speed / hover speed)². 'seen' = measured while all motors were at ≥97% command; 'extrapolated' = the command→speed curve carried to 100% when the motors reached at least 85% together. Battery sag lowers the real figure a little." },
+  pw_fix: { t: "Recoverable", tl: "Steady imbalance + the cost of swinging the motors while holding attitude: what a balanced craft whose motors only move when needed would save.", d: "In % of battery power, so roughly the flight-time gain available. It is an upper bound: some correction effort is always needed against wind and propwash. How it's computed: each motor behaves like a DC motor, duty·Vbat = back-EMF + I·R. Fitting duty = a·speed + b·speed² on steady flight gives both terms (R² 0.96–0.997 on the reference logs; 1/a matches KV × battery voltage). Battery power ∝ duty·(duty − a·speed); the extra from command swings is that product for the band-passed parts, relative to the smooth part. Refitting on each third of the flight gives the range." },
+  vib_rel: { t: "Relative vibration", tl: "This motor's vibration vs a typical motor at the same speed.", d: "The gyro signal is followed in step with each motor's own rotation (order tracking), so only vibration that turns with that motor is kept; other motors average out when their speed differs by more than ~5 Hz. Motors are compared only at the same speed, because vibration grows with RPM.", g: "1.0 = typical. Above 1.6 = worth checking. Above 2.2 = clearly abnormal." },
+  order1: { t: "1× (once per turn)", tl: "Out-of-balance: prop, bell or shaft.", d: "An unbalanced mass shakes the frame once per revolution, with a force that grows with speed squared. Causes: damaged or unbalanced prop, prop not seated flat, bent shaft, dirt or a loose magnet in the bell." },
+  order2: { t: "2× (twice per turn)", tl: "Blade-pass of 2-blade props; also shaft problems.", d: "Each blade passing the arm gives a pulse. On one motor only: one blade differs (nick, bend, pitch). On a pair of motors: prop-to-frame clearance or arm flex." },
+  order3: { t: "3× (three times per turn)", tl: "Blade-pass of 3-blade props.", d: "One motor high: one blade damaged, or the prop sits crooked on the shaft." },
+  floor: { t: "Noise floor", tl: "What \"no motor vibration\" looks like with this method.", d: "The same analysis done at 1.5× motor speed, where no motor produces anything. Values close to this floor contain little real motor vibration." },
+  load: { t: "Load vs average", tl: "How much more throttle this motor needs in steady flight.", d: "Average motor command during calm flight, minus the average of all motors. The pattern tells the cause: two motors on one side → centre of gravity off; one diagonal pair → constant yaw twist (tilted motor, bent arm); one motor alone → that motor or its prop." },
+  rpm_dev: { t: "RPM at equal command", tl: "Does this motor spin as fast as the others for the same throttle?", d: "Median speed at the same command, compared with the average motor. Faster = less load (chipped or smaller prop). Slower = more load or a weak motor (dragging bearings, bent shaft, damaged winding)." },
+  desync: { t: "RPM dropout", tl: "The motor spun far slower than it should.", d: "Flagged when a motor runs below 40% of its usual speed for that command (above 25% command). A very short drop to exactly 0 is usually a telemetry glitch; a longer collapse is a desync." },
+  vib_time: { t: "Vibration over time", tl: "Each motor's 1× vibration vs the others, through the flight.", d: "1.0 = same as the typical motor at that moment. It swings a lot with speed and manoeuvres (and gaps are moments where motors ran too close in speed to separate), so read trends, not single bumps: only a step on one motor that lasts for the rest of the flight suggests something changed, like a prop strike." },
+  live: { t: "Live quad map", tl: "The map follows the playhead.", d: "Dot colour = motor speed, dot size = motor command, ring = that motor's 1× vibration right now (dashed when two motors spin too close in speed to tell apart), labels = speed and load vs average. The CG dot follows the load balance." },
+
+  // ---- playback & 3D ----
+  tab_propwash: { t: "Propwash", tl: "How calm the quad stays after each throttle chop.", d: "After a fast throttle drop the props fly into their own turbulent air. For every chop, the tracking error (setpoint − gyro, 15–100 Hz) in the next 0.6 s is compared with calm flight. Ratings: excellent < 1.5×, good < 2.5×, ok < 3.5×, bad < 5×, terrible above. Hover a dot to replay that chop on the quad at true size.", g: "Mostly good/excellent dots = propwash is handled well." },
+  filter_eff: { t: "Filter effectiveness", tl: "What the filters actually remove on this flight, and what that costs.", d: "Compares the raw and filtered gyro spectra: how many dB of fast noise are removed overall, by the RPM notches on the motor lines, and by the dynamic notch at frame resonances; how much noise is left; and the delay the low-pass filters add.", g: "Aim for the least delay that still leaves gyro noise under ~2 °/s and a D-term fast/useful ratio under 1.2." },
+  fe_hf: { t: "Fast noise removed", tl: "Total reduction above 100 Hz, raw → filtered gyro.", d: "Sum of all gyro filters (LPFs, RPM notches, dynamic notch). −20 dB = 100× less noise power.", g: "More than 20 dB is solid. Under 10 dB: the filters barely act, or the noise sits where they don't reach." },
+  fe_rpm: { t: "RPM notch removal", tl: "How much of each motor harmonic the RPM filter removes.", d: "Measured at each motor's real speed through the flight (worst harmonic shown).", g: "Over 15 dB good; under 12 dB check motor_poles or widen rpm_filter_q." },
+  fe_dyn: { t: "Dynamic notch at resonances", tl: "Removal at the detected frame resonances.", d: "All filters together at each resonance frequency; the dynamic notch should do most of the work there.", g: "Over 12 dB is enough. Less: widen the dyn notch range or add a notch." },
+  fe_mid: { t: "Mid band removed", tl: "Reduction between 50 and 100 Hz.", d: "Filtering in this band is mostly delay: real flight motion lives below ~100 Hz on big props. More reduction here is not better unless there is a resonance.", g: "A few dB is normal." },
+  fe_left: { t: "Noise reaching the motors", tl: "Fast part (>80 Hz) of the motor commands, % of the motor range RMS (worst motor).", d: "The props can't turn it into useful thrust: it ends up as motor heat and sound. The Noise tab splits it by PID term (P carries gyro noise straight through, D amplifies it).", g: "Under 1% low · 1–2% moderate · above 2% high: feel the motors after a hard flight." },
+  fe_d: { t: "D output above 100 Hz", tl: "Share of the D term's output (RMS) that is above 100 Hz.", d: "D should damp motion (slow), not react to noise (fast). Whether it matters depends on how much reaches the motors.", g: "Under 50% mostly useful · above 65% mostly noise." },
+  i_bias: { t: "I holds", tl: "Median I-term in calm flight.", d: "A steady non-zero I means the quad needs a constant push to fly straight: CG offset (roll/pitch) or motor tilt / prop mismatch (yaw).", g: "Within ±15 is fine." },
+  step_src: { t: "Step response source", tl: "Filtered gyro (default) or raw gyro.", d: "Filtered gyro is what the PID loop actually sees, so it is the right signal to judge and tune the controller; noise is removed, so the estimate is tighter. Raw gyro is the true motion before the filters: its step starts earlier by the filter delay, which shows the latency the filters add, but noise makes it less reliable. Both overlays the two (raw dashed).", g: "Tune from Filtered. Use Both to see how many ms your filters cost." },
+  step_band: { t: "Spread band", tl: "Shaded band around each line = how much the individual windows agree.", d: "95% CI: the range the median step is likely in (1.96 × standard error of the median, from the IQR and the number of windows). Narrow = reliable result. IQR: the middle 50% of all windows: how much the response varies from move to move.", g: "A wide CI band means more stick input (flips, rolls) is needed before trusting the numbers." },
+  pid_sug: { t: "Suggested PIDs", tl: "One careful tuning step based on this step response.", d: "Rules: overshoot → more D (or less P if D is already noisy); slow rise → more P and FF; ringing → more D or less P; settles low/high → change I. Step size shrinks for bigger props, which are slower and less tolerant. Values are for the next test flight, not a final tune.", g: "Change one thing, fly the same moves, log and compare. Watch motor temperature after raising D." },
+  vib_bp: { t: "Blade-pass vibration", tl: "Vibration at 2× or 3× the motor speed (one bump per blade).", d: "Uses the blade count of your props. Higher than the other motors means a chipped, bent or unevenly pitched blade, a loose prop, or the prop wash hitting the frame.", g: "1.0 = typical. Above 1.6: inspect that prop; above 2.2: replace it." },
+  tab_sim: { t: "PID simulator", tl: "Try new PIDs on a model of this quad learned from the log.", d: "Each axis's rotation dynamics are identified from this flight. Motor lag and delay are measured directly from the motor commands vs. the eRPM telemetry; the P and D multipliers the flight controller really applied (TPA, yaw attenuation…) are measured from the logged P and D terms. Control authority, damping and (yaw) prop spin-up torque are then fitted so that your logged sticks, run through a Betaflight-accurate controller (PID scaling, D-max, I-term relax, pidsum limit, the real gyro and D-term filters incl. RPM notches) closed around the model, reproduce the logged gyro. Your edits run through the same loop.", g: "Check the Model check view first: it shows how closely the model matches this flight, and up to which frequency your sticks gave it something to learn from." },
+  sim_step: { t: "Step size", tl: "How big the simulated stick flick is (°/s).", d: "A 20 ms stick move to this rate, through your RC smoothing. Bigger steps hit the PID-sum limit sooner and show D-max boosting." },
+  sim_noise: { t: "Real gyro noise", tl: "Feed this log's measured vibration into the simulation.", d: "Raw gyro noise above ~60 Hz from the log is added to the simulated sensor. It goes through your filters and D term to the motors: 'noise → motors' is the RMS of the fast PID output, a proxy for motor heat." },
+  sim_model: { t: "Learned dynamics", tl: "The physics of this quad, measured and fitted from this log.", d: "Per axis: dω/dt = b·(m + λ·(u_d − m)) − a·ω and τ·dm/dt = u_d − m, with u_d the PID sum after the delay. τ and the delay come from the motor commands vs. eRPM (frequency response on the band where they are coherent), scaled by motor speed per flight segment. b, a, λ and a ±30% refinement of τ are fitted by closed-loop output error on the stick-active stretches, judged on the gyro below 30 Hz plus the setpoint → gyro frequency response from 3 to 30 Hz.", g: "Measured on the reference flights: ≈28 ms motor lag on a 2.5″, 38–60 ms on 7″ (slower at lower motor speed)." },
+  sim_b: { t: "Control authority b", tl: "How fast rotation builds per unit of PID output (°/s² per PID unit).", d: "Bigger = lighter or more powerful quad. It sets how much P and D are needed: the loop gain is b × your gains." },
+  sim_tau: { t: "Motor lag τ", tl: "Time for motor+prop to reach a new speed (63%), at the flight's typical motor speed.", d: "Measured from the motor command vs. eRPM telemetry when bidirectional DShot is on. Heavier props and lower motor speed = slower (τ·RPM is roughly constant). This lag plus filter delay decides how much D you need and how high P can go before it oscillates." },
+  sim_delay: { t: "Pure delay", tl: "Dead time between the PID output and the motors reacting.", d: "ESC protocol, motor commutation and the loop itself. Every ms costs phase margin at the crossover frequency." },
+  sim_lam: { t: "Spin-up torque λ (yaw)", tl: "Share of yaw torque that comes straight from props speeding up / slowing down.", d: "Yaw is driven by the props' drag torque (follows motor speed, so it lags) and by the reaction torque of accelerating the props (instant). λ = 0: all lagged; λ = 1: the lead cancels the motor lag. Measured on the reference flights: 0.3–1.9." },
+  sim_check: { t: "Model check", tl: "The model vs your real flight, analysed identically.", d: "Top: step response computed from your own stick moves (the Step tab's method), once from the real gyro and once from the model replaying the same flight. Bottom: closed-loop response |gyro/setpoint| per frequency; markers fade where the sticks didn't excite that frequency (low coherence), so mismatches there are noise, not model error." },
+  sim_a: { t: "Aerodynamic damping", tl: "Natural slowing of rotation by the props and frame (1/s).", d: "Usually small; larger on yaw." },
+  sim_fit: { t: "Model fit", tl: "How well the model reproduces this flight's gyro from its sticks.", d: "100·(1 − rms error / std of the gyro), both low-passed at 30 Hz, median over the stick-active pieces used. Above that frequency the gyro is mostly sensor and frame noise that no model of the sticks can predict. Above ~75% is a close match; what's left is mostly wind and propwash. 'borrowed' = taken from another flight of this craft because this one barely moved that axis; 'no data' = nothing to learn from.", g: "Fit says the model tracks the slow motion; Model check shows whether it also gets the fast dynamics right." },
+  sim_gmul: { t: "Gyro filter multiplier", tl: "Scales the gyro low-pass cutoffs (simplified_gyro_filter_multiplier).", d: "Higher = less filtering: less delay, more noise to D and the motors." },
+  sim_dmul: { t: "D-term filter multiplier", tl: "Scales the D-term low-pass cutoffs (simplified_dterm_filter_multiplier).", d: "Higher = less D-term delay (better damping, better propwash) but more motor noise and heat." },
+  sim_suggest: { t: "Suggest", tl: "Searches small changes of P, I and D around your current tune.", d: "60 candidates per axis, each simulated: it minimises disturbance-kick error and step settling, penalises overshoot above 10%, slow rise, robustness Ms above 1.7 and more than 15% extra noise to the motors. It stays close to your tune on purpose." },
+  sim_kick: { t: "Disturbance kick", tl: "A sudden torque hit, like propwash or a gust.", d: "A 5 ms torque pulse that would spin a free quad up by 100 °/s. Smaller peak and faster settling = better propwash handling." },
+  sim_ms: { t: "Robustness Ms / phase margin", tl: "How far the loop is from oscillating.", d: "From the linear loop L = plant × filters × PID (incl. delays). Ms = peak of |1/(1+L)|: the worst amplification of disturbances. Phase margin: how much extra delay the loop tolerates at its crossover frequency.", g: "Ms 1.3–1.7 and PM > 40° is a solid tune; Ms > 2 or PM < 30° is close to oscillation." },
+  sim_bw: { t: "Bandwidth", tl: "Crossover frequency of the loop.", d: "Where the loop gain falls to 1. Higher = tighter tracking and better disturbance rejection, up to the limit set by motor lag and delay." },
+  pw_speed: { t: "Replay speed", tl: "Speed of the hover replay of a chop.", d: "A propwash wobble at 15–30 Hz is too fast to see in real time on a 60 Hz screen. 0.25× slows it to a visible 4–8 Hz." },
+  h_part: { t: "Part of the flight analysed", tl: "Limit the motor analysis to a throttle band (and to the selected range).", d: "Vibration grows with RPM, so comparing only cruise (15–45%) or only punches (45–100%) can make one motor stand out more clearly. The selected range on the timeline applies too.", g: "Aim for at least ~60 one-second windows for a stable result." },
+  pb_play: { t: "Play / pause", tl: "Plays the log in real time (Space). Green = play, red = pause.", d: "While playing, the blue playhead stays in the middle of every time chart and the data scrolls under it. Arrow keys step 0.2 s (Shift: 5 s)." },
+  pb_speed: { t: "Playback speed", tl: "1× = real time.", d: "From 1/16× (slow motion, to see each wobble) to 8×." },
+  pb_zoom: { t: "Timeline zoom", tl: "How many seconds the timeline shows.", d: "Also changes with the mouse wheel over the timeline, and moves the other time charts with it." },
+  pb_strip: { t: "Timeline", tl: "Drag to move through the flight; scroll to zoom.", d: "Grey = throttle, coloured lines = roll / pitch / yaw rotation. The blue centre line is the current moment and every time chart moves with it. In Select range mode, drag here to choose the part of the flight the analysis tabs use. Drag the grip on the top edge to make this box taller.", g: "Zoom out (scroll) to see the whole flight before selecting a long range." },
+  pb_follow: { t: "Centred playhead", tl: "The playhead stays in the middle; the data moves.", d: "During playback every time chart scrolls so the current moment is always in the centre, and full-detail data is loaded ahead of time." },
+  viewer3d: { t: "3D viewer", tl: "The quad, animated from the log.", d: "Orientation comes from adding up the gyro rotation over time, gently pulled level by the accelerometer (a Mahony filter, like Betaflight's own). There's no compass, so heading slowly drifts." },
+  v_src: { t: "Rotation source", tl: "Which gyro signal drives the quad.", d: "Filtered = what the PID controller sees. Raw = before filtering, so it includes vibration (best combined with a high wobble gain)." },
+  v_cam: { t: "Camera", tl: "Follow heading · World · 3rd person · Flight path.", d: "Follow heading: the view turns with the quad so it always faces away from you (rotation only). World: fixed camera, rotation only. 3rd person: the camera trails behind the quad on a spring while it moves through space. Flight path: fixed camera direction following the quad, with its recent path drawn. The motion comes from the accelerometer (rotated to the world, gravity removed, integrated twice with drift limiting), so it shows the shape of loops, dives and punch-outs, not an exact GPS track." },
+  v_path: { t: "Path scale", tl: "How far the quad moves on screen per metre of estimated motion.", d: "1× = true size relative to the drawn quad (in 3rd person); Flight path view is scaled down a further ~3× so whole loops fit." },
+  v_wobble: { t: "Wobble gain", tl: "1× = the real rotation; higher magnifies the fast part.", d: "The quad always rotates by the true attitude (gyro integrated). Wobble is the part above 3 Hz, integrated from the gyro at the full log rate: gain 0 removes it, 1× is exact, higher multiplies it so small oscillations become visible.", g: "Real fast wobble is tiny: vibration ~0.01°, propwash ~0.2–1°." },
+  v_shake: { t: "Shake gain", tl: "1× = true vibration displacement, to scale with your quad.", d: "Accelerometer content above 8 Hz, integrated twice in the frequency domain at the full log rate (acceleration → position). Slower movement is left out: it is flight manoeuvres and the gravity vector turning with the quad, not vibration. The model is drawn at your prop size (wheelbase ≈ 45 mm per inch of prop), so 1× is true to scale.", g: "Real vibration displacement is micrometres to a few tenths of a mm: use 100–1000× to see it." },
+  v_real: { t: "Real scale", tl: "Sets wobble and shake back to 1×.", d: "At 1× rotation and vibration are the real measured values, drawn to scale for your prop size." },
+  v_show: { t: "Show / hide", tl: "Turn parts of the viewer on or off.", d: "Motor colour always shows speed (see legend). Thrust bars = motor command. Rate HUD = measured rotation (bar) vs commanded (tick). Shake vector = the sudden-acceleration direction." },
+
+  // ---- navigation ----
+  time_nav: { t: "Time navigation", tl: "Drag to move; click a chart, then scroll to zoom.", d: "All time charts on the page share one time window, centred on the playhead: this chart, the timeline at the bottom, the step-response timeline, the motor-health time chart and the time spectrogram. The wheel only zooms after you click a chart, so the page still scrolls normally. Double-click shows the whole log." },
+  ov_nav: { t: "Navigate / Select range", tl: "Navigate: drag the timeline to move. Select range: drag to pick the analysed part.", d: "Navigate: dragging the bottom timeline moves the playhead and every time chart. Select range: drag across the bottom timeline to choose the part of the flight that Summary, Noise, Spectrogram, Step response and Motor health analyse; it is shaded blue. Double-click it or press “Full log” to clear." },
+  ax_focus: { t: "Axis focus", tl: "Show all three axes, or one axis filling the whole chart.", d: "You can also click a panel's title (⤢) to show only that axis, and click it again (⤡) to go back to all three." },
+  freq_nav: { t: "Frequency navigation", tl: "Drag to move; click a panel, then scroll to zoom.", d: "All six panels share one frequency axis, so panning or zooming one moves them all. You can also type the range. Double-click resets to the full range." },
+
+  // ---- spectrogram ----
+  nper: { t: "Resolution", tl: "Frequency detail vs time detail.", d: "Each column is a spectrum computed over N samples. Bigger N = finer frequency detail (Δf = log rate ÷ N) but blurrier in time (Δt = N ÷ log rate). Smaller N = the opposite.", g: "256 for general use. 512–1024 to separate a resonance from a nearby motor line. 64–128 to catch short events." },
+  gamma: { t: "Gamma", tl: "Bends the colour scale to bring out quiet or loud parts.", d: "Colour = colormap(position^γ). γ below 1 lifts the quiet background, so weak lines appear. γ above 1 darkens it, so only the strongest peaks stay bright. The colour bar keeps the real dB values." },
+  frange: { t: "Frequency range", tl: "Lowest and highest frequency shown.", d: "Zoom in on the interesting part; 50–250 Hz holds the motor fundamentals and most frame resonances." },
+  clim: { t: "Colour limits", tl: "Which dB range the colours span.", d: "Shared by raw, filtered and D-term views, so the same colour means the same loudness. Auto uses the raw gyro's typical range. D-term uses different units, so its overall brightness isn't directly comparable." },
+  colormap: { t: "Colormap", tl: "Colour scheme of the heatmap.", d: "Viridis, Inferno, Magma, Cividis and BBX blue change brightness evenly, so they show differences honestly. Jet and Turbo add contrast but can create false edges." },
+  motor_lines: { t: "Motor lines", tl: "Where motor noise should be: 1×, 2×, 3× motor speed.", d: "Average motor rotation frequency (from the ESCs) at each throttle band or moment. Noise that follows these lines is motor noise, which the RPM filter should remove." },
+
+  // ---- frame resonance detector ----
+  res_on: { t: "Frame resonances", tl: "Red marks at suspected structural vibrations.", d: "Motor noise moves with RPM; a frame, arm or stack resonance stays at one frequency. The detector removes all motor lines (1×–4× each motor's speed), splits the flight into 5% throttle bands, and flags peaks that stay at the same frequency in many bands. Dashed line = frequency; solid bar = throttle range where it was found; bold = axes where it was found." },
+  res_prom: { t: "Prominence", tl: "How much the peak must stick out (dB).", d: "Height above the surrounding spectrum. Higher = stricter: fewer, clearer results. Lower = more sensitive: more candidates, more false alarms.", g: "+6 dB = 2× the amplitude of its surroundings." },
+  res_persist: { t: "Consistency", tl: "How much of the throttle range it must appear in.", d: "Share of the flown throttle bands where the peak shows up at the same frequency. Real resonances are there at most throttles; random bumps aren't." },
+  res_mask: { t: "Motor mask", tl: "Gap cut around every motor line (±%).", d: "Keeps motor noise from being mistaken for a resonance. Wider = safer, but may hide a real resonance sitting close to a motor line." },
+  res_fmax: { t: "Search up to", tl: "Highest frequency the detector considers.", d: "Frame and stack resonances on 3–7\" quads are usually below ~150 Hz; higher peaks are mostly motor harmonics and prop noise that the RPM filter already handles.", g: "150 Hz default. Raise it for small or stiff frames, or to check the whole spectrum." },
+  res_presets: { t: "Strictness presets", tl: "Sensitive / balanced / strict.", d: "Sensitive (4 dB, 25%, ±6%) shows weak candidates. Balanced (6 dB, 40%, ±8%) is the default. Strict (9 dB, 60%, ±10%) only flags clear, ever-present resonances." },
+
+  // ---- noise charts ----
+  psd: { t: "Noise spectrum (PSD)", tl: "How much vibration there is at each frequency.", d: "Power spectral density, averaged over many short slices of the flight (Welch method). The scale is logarithmic: +10 dB = 10× the power, +3 dB ≈ 2×." },
+  filter_resp: { t: "Filter response", tl: "How much each filter lets through at each frequency.", d: "Calculated from your settings with Betaflight's own filter equations. 0 dB = passes unchanged; −20 dB = 1/10 of the amplitude. Moving filters are shown at the average throttle, RPM notches at the typical motor speed, the dynamic notch at its estimated position." },
+  delay: { t: "Filter delay", tl: "How late the filtered signal arrives.", d: "Time shift of a 100 Hz signal through the low-pass filters. The controller acts on this late information, which limits how high P and D can go and worsens propwash.", g: "Gyro: under 1 ms light, 1–2 ms typical, over 2 ms heavy. D-term: under 2.5 ms light, over 4 ms heavy." },
+  rpm_band: { t: "Motor noise band", tl: "Where motor noise was during this window.", d: "The range covered by the motors' typical speed × 1, 2, 3 (10th to 90th percentile)." },
+  dyn_band: { t: "Dynamic notch range", tl: "Where the dynamic notch is allowed to move.", d: "dyn_notch_min_hz to dyn_notch_max_hz." },
+
+  // ---- step metrics & controls ----
+  overshoot: { t: "Overshoot", tl: "How far past the target it goes.", d: "Peak of the response minus 1, in %.", g: "0–10% crisp · 10–20% lively (common with strong FF) · above 25% under-damped." },
+  rise: { t: "Rise time", tl: "Time from 10% to 90% of the move.", d: "How quickly it gets there.", g: "Roll/pitch: under 20 ms very sharp, 20–30 ms typical, over 30 ms soft. Yaw is naturally slower." },
+  latency: { t: "Latency", tl: "Time to reach halfway.", d: "Includes filter delay, motor spin-up and the controller. Mostly set by motor/prop size and filtering." },
+  settle: { t: "Settling time", tl: "When it stops wandering more than ±10%.", d: "Last moment the response is more than 10% away from its final value." },
+  steady: { t: "Steady state", tl: "Where it ends up (200–500 ms after the move).", d: "Below 1 = doesn't fully hold the commanded rate (I too weak). Above 1 = keeps overshooting (FF or I too strong)." },
+  ringing: { t: "Ringing", tl: "How many times it swings around the target.", d: "Swings bigger than 5% after the peak, counted on a lightly smoothed curve.", g: "0–1 well damped · 2 slight · 3+ oscillating." },
+  n: { t: "Windows (n)", tl: "How many pieces of the flight were used.", d: "A window is used if its stick movement and throttle fall inside the selected ranges.", g: "Aim for 30 or more for a reliable result." },
+  min_sp: { t: "Stick rate range", tl: "Only use moments with this much stick movement.", d: "The method needs some stick input to work; moments without any only add noise. Comparing small inputs with big flips shows whether the tune behaves differently for each." },
+  thr_rng: { t: "Throttle range", tl: "Only use moments in this throttle band.", d: "Useful to check high-throttle behaviour (TPA) against hover." },
+  win_s: { t: "Window length", tl: "Length of each analysis piece.", d: "Longer windows give a steadier result but fewer windows." },
+  show_curves: { t: "Individual windows", tl: "Show each window's own estimate.", d: "Each thin line is one window. Their spread is partly estimation noise, which is why the median is used." },
+};
+
+// Per-tab reading guide (💡 Tips). Plain HTML allowed.
+const TAB_TIPS = {
+  summary: [
+    "<b>Start here.</b> Top priorities lists what matters most; fix those first, one change at a time.",
+    "<b>Confirm the prop size</b> in Quad profile: expectations for response speed, filter delay and resonance search all scale with it.",
+    "The small charts are previews; click a card title to open the full analysis.",
+  ],
+  tracking: [
+    "<b>Dotted</b> = what you asked for (setpoint), <b>colour</b> = what the quad did (gyro). Good tracking: the colour line hugs the dotted line.",
+    "Colour lags behind dotted → slow response (low P/FF or heavy filtering). Colour spikes past dotted after a move → overshoot (too little D).",
+    "Fast ripples with steady sticks → oscillation or noise: compare filtered vs raw gyro in the timeline, then look at the Noise tab.",
+    "Use the 3D viewer with <b>raw gyro + wobble 20–50×</b> to see vibration and propwash with your eyes.",
+    "Drag the timeline at the bottom to move; click the chart and scroll to zoom. All time charts stay in sync.",
+  ],
+  pid: [
+    "Each row shows how hard P, I, D and FF push on that axis.",
+    "<b>D looks fuzzy/thick</b> → noise is reaching the motors through D (hot motors). Check the D-term filters on the Noise tab.",
+    "<b>I drifts away from zero</b> in straight flight → a constant imbalance (CG, bent motor, prop) that I is compensating.",
+    "Large FF spikes on stick moves are normal; FF that fights the gyro afterwards can mean too much FF.",
+    "The coloured label on each plot summarises that axis; red/amber shading marks PID-sum clipping or I-term wind-up. Details are in the panel on the right.",
+  ],
+  pidsim: [
+    "The model of your quad is learned from this log; <b>Your flight replay</b> shows how well it reproduces the real gyro with your current PIDs.",
+    "Edit P, I, D, D max, FF on the right: dashed = current, solid = your edits. Step response = sticks, Disturbance kick = propwash/gusts, Stability = how close to oscillation.",
+    "Keep Ms under ~1.7 and phase margin above ~40°. Watch 'noise → motors' when raising D or filter multipliers.",
+    "✨ Suggest searches small changes around your tune. Always test-fly carefully and check motor temperature.",
+  ],
+  propwash: [
+    "Each dot is a throttle chop; its height is how much more the quad wobbled afterwards than in calm flight. The background bands give the rating.",
+    "<b>Hover a dot</b>: the quad replays that chop at true size (slow motion by default) with its rating, frequency and settling time. Click it to jump there.",
+    "Propwash fixes, in order: more D max, less filter delay, higher dynamic idle, thrust_linear, lower iterm_relax_cutoff for big props.",
+  ],
+  motors: [
+    "Top: motor command (%). Flat tops at 100% = motor maxed out, and the controller loses authority there.",
+    "Bottom: real motor speed from the ESCs. Motors should move together; one consistently higher/lower points to CG or a weak motor/prop.",
+    "Motor Health tab turns these patterns into a diagnosis.",
+    "Red shading = a motor at 100%, amber = a motor at its minimum with throttle up (lost authority). The labels and the right panel summarise headroom and motor buzz.",
+  ],
+  noise: [
+    "<b>Grey</b> = raw gyro vibration, <b>colour</b> = after filtering. The bigger the gap, the more the filters remove.",
+    "Green bands = where motor noise sits (1×, 2×, 3× motor speed); the RPM filter should cut those.",
+    "Red dashed lines = suspected frame resonances (don't move with RPM). Check they're inside the dynamic notch range and well reduced.",
+    "Bottom row = what each filter lets through (0 dB = everything). Lower cutoffs remove more noise but add delay, which hurts propwash handling.",
+    "Click a panel title to show one axis large. Use <b>Detail</b> for finer frequency resolution.",
+  ],
+  spectro: [
+    "Brighter = louder. <b>Diagonal lines</b> = motor noise (moves with throttle/RPM). <b>Vertical lines</b> = frame resonance (fixed frequency).",
+    "Compare Raw vs Filtered: bright structures that survive filtering are what reaches the PID loop.",
+    "Throttle view shows where noise lives across the throttle range; time view shows when it happened (bumps, crashes, flips).",
+    "Raise <b>Resolution</b> to separate close lines; lower <b>gamma</b> to make faint lines visible.",
+  ],
+  step: [
+    "This is how the quad would react to an instant stick jump, worked out from normal flying. <b>1.0</b> = exactly the rate you asked for.",
+    "Good: fast rise, small overshoot (under ~10–15%), settles near 1.0 without wobbling.",
+    "Overshoot → more D or less P/FF. Slow rise → more P/FF. Settles low → more I.",
+    "Needs stick movement: select parts of the flight with rolls/flips (Select range) and aim for 30+ windows.",
+    "Compare presets (gentle vs aggressive) to see if the tune behaves differently for small and big moves.",
+    "The shaded band = spread: narrow means a reliable result. Source: Filtered to tune; Both shows the delay your filters add.",
+    "Suggested PIDs (in the findings below) are one careful step for your prop size. Copy the CLI, fly, log, check again.",
+  ],
+  health: [
+    "Each card is one motor, placed where it sits on the quad. The badge says whether to act; the first line says what to check.",
+    "Gauges: the marker should sit in the green. Balance and Blades are × the other motors (1 = same); Load and RPM are % vs the others.",
+    "1× (once per turn) = imbalance: prop, bell, shaft. 2×/3× = blade-pass: a damaged blade or props close to the frame.",
+    "Load balance: one side working harder = centre of gravity off; one diagonal pair = twisted motor/arm; one motor = that motor or prop.",
+    "Swap props between motors and log again to tell a bad prop from a bad motor.",
+    "Play the log: the quad map follows the timeline live.",
+  ],
+};
+
+// Settings sidebar groups: [title, header keys]
+const GROUPS = [
+  ["Loop", ["looptime", "pid_process_denom", "P interval"]],
+  ["Rates", ["rates_type", "rc_rates", "rates", "rc_expo"]],
+  ["Gyro filters", ["gyro_lpf1_type", "gyro_lpf1_static_hz", "gyro_lpf1_dyn_hz", "gyro_lpf2_type", "gyro_lpf2_static_hz", "gyro_notch_hz", "simplified_gyro_filter_multiplier"]],
+  ["D-term filters", ["dterm_lpf1_type", "dterm_lpf1_static_hz", "dterm_lpf1_dyn_hz", "dterm_lpf2_type", "dterm_lpf2_static_hz", "dterm_notch_hz", "simplified_dterm_filter_multiplier"]],
+  ["Dynamic notch", ["dyn_notch_count", "dyn_notch_q", "dyn_notch_min_hz", "dyn_notch_max_hz"]],
+  ["RPM filter", ["rpm_filter_harmonics", "rpm_filter_q", "rpm_filter_min_hz", "rpm_filter_weights", "motor_poles", "dshot_bidir"]],
+  ["Other", ["motor_idle", "tpa_rate", "tpa_breakpoint", "anti_gravity_gain", "iterm_relax_cutoff", "feedforward_boost", "thrust_linear", "simplified_master_multiplier"]],
+];
+const ENUMS = {
+  gyro_lpf1_type: ["PT1", "BIQUAD", "PT2", "PT3"], gyro_lpf2_type: ["PT1", "BIQUAD", "PT2", "PT3"],
+  dterm_lpf1_type: ["PT1", "BIQUAD", "PT2", "PT3"], dterm_lpf2_type: ["PT1", "BIQUAD", "PT2", "PT3"],
+  rates_type: ["Betaflight", "Raceflight", "KISS", "Actual", "Quick"], dshot_bidir: ["off", "on"],
+};

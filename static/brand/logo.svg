@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 160" width="600" height="160">
+  <!-- wordmark: geometric "bb" + an "x" that is the quad itself; "ANALYZER" set in the UI font -->
+  <g fill="none" stroke="#e8ecf2" stroke-width="18" stroke-linecap="round">
+    <path d="M30 22 V130"/><circle cx="64" cy="96" r="34"/>
+    <path d="M130 22 V130"/><circle cx="164" cy="96" r="34"/>
+  </g>
+  <g fill="#3987e5" fill-opacity=".14" stroke="#3987e5" stroke-width="7">
+    <circle cx="232" cy="66" r="18"/><circle cx="296" cy="66" r="18"/><circle cx="232" cy="130" r="18"/><circle cx="296" cy="130" r="18"/>
+  </g>
+  <path d="M232 66 L296 130 M296 66 L232 130" stroke="#e8ecf2" stroke-width="16" stroke-linecap="round"/>
+  <g fill="#e8ecf2"><circle cx="232" cy="66" r="6"/><circle cx="296" cy="66" r="6"/><circle cx="232" cy="130" r="6"/><circle cx="296" cy="130" r="6"/></g>
+  <text x="340" y="128" font-family="'DejaVu Sans', 'Segoe UI', system-ui, sans-serif" font-size="34" font-weight="600" letter-spacing="7" fill="#9aa3b2">ANALYZER</text>
+  <path d="M318 66 L352 66 C359 66 360 36 367 35 C374 34 376 44 381 43 C386 42 389 40 396 40 L588 40" fill="none" stroke="#ffb340" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

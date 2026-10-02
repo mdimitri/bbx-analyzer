@@ -1,0 +1,7 @@
+# Installed automatically by start.bat / start.command / start.sh into a private .venv in this folder.
+fastapi>=0.100
+uvicorn>=0.23
+python-multipart>=0.0.6
+numpy>=1.23
+# orangebox (the .BBL decoder) is installed by the launcher too: its PyPI wheel has an entry point modern pip
+# rejects, so the launcher downloads the wheel and unpacks it directly.

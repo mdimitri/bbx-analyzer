@@ -1,0 +1,19 @@
+BBX Analyzer
+Copyright (c) 2026 Martin Dimitrievski
+
+Non-commercial licence
+
+Permission is granted, free of charge, to any person obtaining a copy of this software and associated files (the "Software"),
+to use, copy, modify, merge and distribute the Software and derived works, for NON-COMMERCIAL purposes only, subject to these
+conditions:
+
+1. The above copyright notice, this permission notice and the author credit must be kept in all copies and derived works.
+2. Commercial use is not permitted without prior written permission from the author. Commercial use includes selling the
+   Software or a derived work, and including it in, or using it to provide, a paid product or service.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY CLAIM, DAMAGES
+OR OTHER LIABILITY ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR ITS USE. Tuning suggestions and simulations are
+illustrative only; the user is responsible for any settings flashed to a flight controller and for flying safely.
+
+With thanks to the FPV community.
