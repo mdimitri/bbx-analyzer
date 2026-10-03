@@ -35,7 +35,11 @@ If you know Blackbox Explorer or PIDtoolbox, you already have traces, spectra, s
 - 🔊 **Frame resonances and a filter planner.** BBX finds frame resonances that stay at one frequency while the motor noise moves with RPM. It tells you whether your filters actually remove them and proposes notches with ready-to-paste CLI. It also predicts what a change does to noise and delay before you fly it.
 - ⚙️ **Motor & prop health per motor.** It tracks each motor's own rotation, so it can say *"M3 vibrates 1.9× more than the others once per turn: unbalanced prop or bent shaft"*. It also covers load balance (which side is heavy), speed for the same command, and desync detection.
 - 🔋 **Where your battery goes.** It estimates how much power is lost to motors twitching, buzzing on noise and uneven load. Each effect is shown on your own motor traces. No current sensor needed.
-- 📋 **Plain-language findings.** Each one has a *Try:* and a *Cost:*, with the CLI lines to paste. Prop size and blade count are estimated from the log, so the advice fits a 2.5″ whoop and a 10″ long-range rig alike.
+- 🗺️ **One tune plan.** Every suggestion from every analysis, in the order to apply it (logging → mechanical → filters → PIDs → feedforward), with conflicts resolved and one CLI block to paste. Tick what you want; choices from the filter planner or the PID simulator can replace the automatic proposal.
+- ⇄ **Before → after.** Open two flights and BBX lists what you changed in the settings, what got better or worse in the flight, and what to try next based on what moved together.
+- 📄 **PDF report.** One click: profile, key numbers, priorities, charts, the tune plan and (when comparing) the before → after page. Made in your browser, ready for Discord, a forum or a GitHub issue.
+- 🐞 **Debug modes understood.** With `debug_mode` FFT_FREQ, DYN_LPF or RPM_FILTER the logged notch and motor frequencies are drawn on the spectrogram, so you see whether the dynamic notches really follow the noise. Other modes (D_MAX, FEEDFORWARD, RC_SMOOTHING, TPA, …) show as labelled traces.
+- 📋 **Plain-language findings.** Each one has a *Try:* and a *Cost:*, with the CLI lines to paste. Prop size, blade count and the all-up weight are estimated from the log, so the advice fits a 2.5″ whoop and a 10″ long-range rig alike.
 - 🎬 **3D replay and synced video.** Play the flight on an animated quad, or load your DVR clip and watch it behind the charts.
 
 ---
@@ -79,6 +83,9 @@ If you know Blackbox Explorer or PIDtoolbox, you already have traces, spectra, s
 Python (FastAPI + numpy) backend and a vanilla JS + Plotly frontend, no build step. Run it by hand with
 `pip install -r requirements.txt` + the orangebox wheel (see `start.sh`), then `uvicorn app:app`.
 How the analyses work, and the reasoning behind them, is in **[docs/TECHNICAL.md](docs/TECHNICAL.md)**.
+
+Logs are decoded by `fastbbl.py`, a specialised decoder that gives exactly the same output as orangebox (checked by the tests) about 4× faster; orangebox stays as the fallback. Run the tests with
+`pip install -r requirements-dev.txt` and `python -m pytest tests` (decoder parity on a short real log and every log in `logs/`, truncated and corrupted logs, units, debug-mode tables, all analyses, the tune plan, the comparison and the web API).
 </details>
 
 ---

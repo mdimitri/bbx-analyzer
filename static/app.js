@@ -36,7 +36,7 @@ const api = (path, q = {}) => {
 const API_CACHE = new Map();
 // ---- busy indicator: what is running, live progress from the server (/api/progress) when it knows it, elapsed time ----
 const BUSY = { jobs: [], timer: 0, t0: 0 };
-const SRV_TASK = { decode: "Decoding the log", sim: "Learning this quad's dynamics" };
+const SRV_TASK = { decode: "Decoding the log", sim: "Learning this quad's dynamics", compare: "Comparing the two flights" };
 const busy = async (fn, label = "Working") => {
   const job = { label, t0: performance.now() }; BUSY.jobs.push(job);
   if (!BUSY.timer) { BUSY.t0 = performance.now(); $("busy").hidden = false; busyTick(); BUSY.timer = setInterval(busyTick, 350); }
@@ -51,7 +51,7 @@ async function busyTick() {
   if (S.file) {
     try {
       const pr = await fetch(`/api/progress?name=${encodeURIComponent(S.file)}&idx=${S.sub}`).then(r => r.json());
-      const k = ["decode", "sim"].find(k => pr[k]);
+      const k = ["decode", "sim", "compare"].find(k => pr[k]);
       if (k) { title = SRV_TASK[k]; detail = pr[k].detail; frac = pr[k].frac; }
     } catch (e) {}
   }
@@ -112,10 +112,17 @@ const line = (x, y, name, color, { line: l = {}, ...o } = {}) => ({ type: "scatt
 // ---------- time-series tabs (zoom → refetch at full resolution) ----------
 const TS = {
   tracking: {
-    titles: AX, fields: [0, 1, 2].flatMap(i => [`setpoint[${i}]`, `gyroADC[${i}]`]),
+    titles: () => S.trk.dbg && dbgCh() ? [...AX, `Debug · ${S.meta.debug.mode}`] : AX,
+    fields: () => [0, 1, 2].flatMap(i => [S.trk.sp && `setpoint[${i}]`, S.trk.filt && `gyroADC[${i}]`, S.trk.raw && hasRaw() && `gyroUnfilt[${i}]`]).filter(Boolean)
+      .concat(S.trk.dbg && dbgCh() ? dbgCh().map(c => c.field) : []),
+    // raw (unfiltered) underneath in grey, like Blackbox Explorer's gyroUnfilt; filtered on top in the axis colour; setpoint dotted
     traces: d => [0, 1, 2].flatMap(i => [
-      line(d.t, d[`gyroADC[${i}]`], `gyro ${AX[i].toLowerCase()}`, axc(i), { yaxis: `y${i + 1}` }),
-      line(d.t, d[`setpoint[${i}]`], "setpoint", css("--ink"), { yaxis: `y${i + 1}`, line: { dash: "dot", width: 1.2 }, legendgroup: "sp", showlegend: !i })]),
+      d[`gyroUnfilt[${i}]`] && line(d.t, d[`gyroUnfilt[${i}]`], S.trk.filt ? "gyro raw (unfiltered)" : `gyro raw · ${AX[i].toLowerCase()}`, S.trk.filt ? css("--muted") : axc(i),
+        { yaxis: `y${i + 1}`, line: { width: 1 }, opacity: S.trk.filt ? 0.7 : 1, legendgroup: S.trk.filt ? "raw" : `raw${i}`, showlegend: !S.trk.filt || !i }),
+      d[`gyroADC[${i}]`] && line(d.t, d[`gyroADC[${i}]`], `gyro ${AX[i].toLowerCase()}${S.trk.raw && hasRaw() ? " (filtered)" : ""}`, axc(i), { yaxis: `y${i + 1}` }),
+      d[`setpoint[${i}]`] && line(d.t, d[`setpoint[${i}]`], "setpoint", css("--ink"), { yaxis: `y${i + 1}`, line: { dash: "dot", width: 1.2 }, legendgroup: "sp", showlegend: !i })]).filter(Boolean)
+      .concat(S.trk.dbg && dbgCh() ? dbgCh().filter(c => d[c.field]).map((c, j) => line(d.t, d[c.field].map(v => v / c.scale), `${c.label}${c.unit ? ` (${c.unit})` : ""}`,
+        ["#ffb340", "#ff6bd6", "#7cf3ff", "#b8ff6b", "#ffd36b", "#c9a0ff", "#6bffb8", "#ff8a6b"][j % 8], { yaxis: "y4", line: { width: 1.2 }, legendgroup: "dbg" + j })) : []),
     hint: "°/s · dotted = what you asked for (setpoint) · colour = what the quad did (gyro)",
   },
   pid: {
@@ -141,18 +148,21 @@ async function renderTS(win) {
   const tab0 = S.tab, T = TS[S.tab], D = S.meta.stats.duration_s, r = win || S.view || S.range || [0, D], w = r[1] - r[0];
   // fetch half a window of margin on each side so panning never shows empty edges before the refetch
   const f0 = Math.max(0, r[0] - w), f1 = Math.min(D, r[1] + w);   // one window of margin each side: panning / playback never shows empty edges
-  const d = await api("series", { fields: T.fields.join(","), t0: f0, t1: f1, n: 6000 });
+  const fields = typeof T.fields === "function" ? T.fields() : T.fields;
+  const d = await api("series", { fields: fields.join(","), t0: f0, t1: f1, n: 6000, smooth: S.tab === "tracking" && S.trk.smooth ? S.trk.smooth : null });
   if (S.tab !== tab0) return;
   S._fetched = [f0, f1];
-  const L = stack(T.titles.length, T.titles, { dragmode: "pan" });
+  const titles = typeof T.titles === "function" ? T.titles() : T.titles;
+  const L = stack(titles.length, titles, { dragmode: "pan" });
   L.legend = { ...L.legend, x: 0.5, xanchor: "center" };   // right corner is kept for the per-plot verdict labels
-  L.xaxis.range = r; L.xaxis.uirevision = ++TSY.rev; L.uirevision = S.file + S.tab;
-  for (let k = 1; k <= T.titles.length; k++) L[k > 1 ? `yaxis${k}` : "yaxis"].fixedrange = true;
+  L.xaxis.range = r; L.xaxis.uirevision = ++TSY.rev; L.uirevision = S.file + S.tab + titles.length;
+  for (let k = 1; k <= titles.length; k++) L[k > 1 ? `yaxis${k}` : "yaxis"].fixedrange = true;
   setTimeAxes([{ axis: "xaxis", dim: "x", pair: null }]);
   $("controls").innerHTML = tbar(`<h3>${$("tabs").querySelector(".on").textContent}</h3>${S.tab === "pid" ? pidvSeg() : ""}<span class="hint" data-tip="time_nav">${T.hint} · drag = move · click the chart, then wheel = zoom · all time charts follow · double-click = whole log</span>
-    ${S.tab === "tracking" ? `<span class="tspacer"></span><span class="chips" id="vtoggle">${chip("v", "3D viewer", S.viewerOn, { tip: "viewer3d" })}</span>` : ""}`, []);
-  bindPidv();
-  if ($("vtoggle")) $("vtoggle").onclick = () => { S.viewerOn = !S.viewerOn; store.set("viewerOn", S.viewerOn); setupPlayer(); render(); };
+    ${S.tab === "tracking" ? `<span class="tspacer"></span><span class="chips" id="vtoggle">${chip("v", "3D viewer", S.viewerOn, { tip: "viewer3d" })}</span>` : ""}`, S.tab === "tracking" ? trkGroups() : []);
+  bindPidv(); if (S.tab === "tracking") bindTrk();
+  if ($("vtoggle")) $("vtoggle").onclick = async () => { S.viewerOn = !S.viewerOn; store.set("viewerOn", S.viewerOn); setupPlayer(); await render();
+    requestAnimationFrame(() => $("main").data && Plotly.Plots.resize($("main"))); };   // the chart's column width changed with the viewer
   if (typeof PB !== "undefined" && PB.d) L.shapes = phShapes($("main"), PB.t);
   const A = T.an ? await tsAnalysis(T.an) : null;
   if (S.tab !== tab0) return;
@@ -163,6 +173,26 @@ async function renderTS(win) {
   if (split && $("v3d")) { const hMain = parseFloat($("main").style.height), vp = document.querySelector(".vpanel");
     $("v3d").style.height = Math.max(240, hMain - (vp ? vp.offsetHeight : 0) - 12) + "px"; PB.dirty = true; }
   await Plotly.react("main", T.traces(d), L, CFG);
+}
+
+// ---------- Tracking: which traces, and optional smoothing (the log stores gyro in whole °/s unless high resolution is on) ----------
+S.trk = { sp: true, filt: true, raw: false, smooth: 0, ...store.get("trk", {}) };
+const hasRaw = () => !!(S.meta && S.meta.fields.includes("gyroUnfilt[0]"));
+const dbgCh = () => S.meta && S.meta.debug && S.meta.debug.mode && S.meta.debug.channels && S.meta.debug.channels.length ? S.meta.debug.channels : null;
+function trkGroups() {
+  const u = (S.meta && S.meta.units) || {}, step = u.step_dps ?? 1;
+  return [
+    tg("Show", `<span class="chips" id="trkShow">${chip("sp", "Setpoint", S.trk.sp, { color: css("--ink"), dash: true })}${chip("filt", "Gyro filtered", S.trk.filt, { color: css("--roll"), tip: "trk_filt" })}${hasRaw()
+      ? chip("raw", "Gyro raw", S.trk.raw, { color: css("--muted"), tip: "trk_raw" }) : `<button class="chip" disabled title="gyroUnfilt isn't in this log">Gyro raw · not logged</button>`}${dbgCh()
+      ? chip("dbg", `Debug · ${S.meta.debug.mode}`, S.trk.dbg, { color: "#ffb340", tip: "trk_dbg" }) : ""}</span>`),
+    tg("Smoothing", `<span class="seg" id="trkSm">${[[0, "Off"], [1, "1 ms"], [3, "3 ms"], [5, "5 ms"]].map(([v, l]) => `<button data-v="${v}" class="${S.trk.smooth === v ? "on" : ""}">${l}</button>`).join("")}</span>
+      <span class="hint">logged in ${step === 1 ? "whole °/s" : step + " °/s"} steps</span>`, { tip: "trk_smooth" }),
+  ];
+}
+function bindTrk() {
+  $("trkShow").onclick = e => { const b = e.target.closest(".chip"); if (!b || b.disabled) return; const k = b.dataset.k;
+    S.trk[k] = !S.trk[k]; if (!S.trk.sp && !S.trk.filt && !S.trk.raw && !S.trk.dbg) S.trk.filt = true; store.set("trk", S.trk); render(); };
+  $("trkSm").onclick = e => { const v = e.target.dataset.v; if (v == null) return; S.trk.smooth = +v; store.set("trk", S.trk); render(); };
 }
 
 // ---------- interpretation layer on the PID terms / Motors tabs: event shading, per-plot labels, findings panel ----------
@@ -381,7 +411,7 @@ async function renderSpectro() {
     tg("Frequency", `<label class="ctl"><input id="fmin" type="number" step="10" min="0" value="${Math.round(fr[0])}"> – <input id="fmax" type="number" step="10" value="${Math.round(fr[1])}"> Hz</label>
       <button class="btn sm ghost" id="ffull" ${S.fr ? "" : "disabled"}>Full${S.fr ? "" : " ✓"}</button>`, { tip: "frange" }),
     tg("Display", `<select id="cmap" data-tip="colormap">${Object.keys(CMAPS).map(k => `<option ${k === S.cmap ? "selected" : ""}>${k}</option>`).join("")}</select>
-      <span class="chips" id="schips">${chip("ml", "Motor lines", S.motorLines, { tip: "motor_lines" })}</span>
+      <span class="chips" id="schips">${chip("ml", "Motor lines", S.motorLines, { tip: "motor_lines" })}${dbgFreq() ? chip("dbg", `Debug: ${dbgFreqName()}`, S.dbgLines, { tip: "dbg_lines", color: css("--s4") }) : ""}</span>
       ${tpop("spAdv", `⚙ ${S.clim ? "Manual" : "Auto"} ${Math.round(zmin)}…${Math.round(zmax)} dB`, `<div class="ph">Colour scale &amp; detail</div>
         ${prow("dB range", `<input id="zmin" type="number" step="1" value="${zmin}"> – <input id="zmax" type="number" step="1" value="${zmax}"> <button class="btn sm ghost" id="zauto" ${S.clim ? "" : "disabled"}>Auto${S.clim ? "" : " ✓"}</button>`, "clim")}
         ${prow("Gamma γ", `<input id="gam" type="range" min="-1.6" max="1.6" step="0.05" value="${Math.log2(S.gamma)}"><b id="gamV">${S.gamma.toFixed(2)}</b>`, "gamma")}
@@ -399,7 +429,7 @@ async function renderSpectro() {
   const setF = () => { const a = Math.max(0, +$("fmin").value), b = Math.min(nyq, +$("fmax").value); if (a < b) setSfr(a <= 0 && b >= nyq - 1 ? null : [a, b], true); };
   $("fmin").onchange = setF; $("fmax").onchange = setF;
   $("ffull").onclick = () => setSfr(null, true);
-  $("schips").onclick = () => { S.motorLines = !S.motorLines; render(); };
+  $("schips").onclick = e => { const b = e.target.closest(".chip"); if (!b) return; if (b.dataset.k === "dbg") S.dbgLines = !S.dbgLines; else S.motorLines = !S.motorLines; render(); };
   bindResCtl(); bindFocus();
   const ylab = S.mode === "time" ? "time (s)" : "throttle (%)", tk = gammaTicks(zmin, zmax, S.gamma);
   const tr = ds.flatMap((d, k) => {
@@ -411,6 +441,7 @@ async function renderSpectro() {
       line: { color: rgba(css("--ink").length === 7 ? css("--ink") : "#ffffff", .75), width: 1, dash: "dot" }, hovertemplate: `motor ×${h}: %{x:.0f} Hz<extra></extra>`, showlegend: false, connectgaps: false }));
     return o;
   });
+  if (S.dbgLines && dbgFreq()) tr.push(...await dbgSpectroLines(ds, axes));
   const L = cols(axes.length, axes.map(i => AX[i]), "frequency (Hz)", { showlegend: false, dragmode: "pan", margin: { l: 46, r: 8, t: 30, b: 30 } });
   L.annotations.forEach(a => { if (a.name === "title") { a.text = `<b>${a.text}</b> ${axes.length > 1 ? "⤢" : "⤡"}`; a.hovertext = axes.length > 1 ? "click: show only this axis" : "click: show all axes"; } });
   axes.forEach((_, k) => { const s = k ? k + 1 : "";
@@ -435,7 +466,25 @@ async function renderSpectro() {
   $("main")._freq = "spectro";
   fitMain(400);
   await Plotly.react("main", tr, L, CFG);
-  $("findings").innerHTML = S.res.on && res.list.length ? findingsHTML(resonance_findings_js(res), `<div class="fh">Suspected frame resonances</div>`) : "";
+  const dF = (S.meta.debug && S.meta.debug.findings) || [];
+  $("findings").innerHTML = (dF.length ? findingsHTML(dF, `<div class="fh">Dynamic notch (debug ${esc(S.meta.debug.mode)})</div>`) : "")
+    + (S.res.on && res.list.length ? findingsHTML(resonance_findings_js(res), `<div class="fh">Suspected frame resonances</div>`) : "");
+}
+// ---- logged debug frequencies (dynamic-notch centres, RPM-filter motor speeds) drawn over the spectrogram ----
+S.dbgLines = true;
+const dbgFreq = () => S.meta && S.meta.debug && S.meta.debug.freq && S.meta.debug.freq.length ? S.meta.debug.freq : null;
+const dbgFreqName = () => ({ FFT_FREQ: "notch freqs", DYN_LPF: "notch + LPF", RPM_FILTER: "RPM filter" }[S.meta.debug.mode] || S.meta.debug.mode);
+async function dbgSpectroLines(ds, axes) {
+  const D = S.meta.debug, F = dbgFreq(), out = [], dbgAx = D.axis || 0, allAx = D.mode === "RPM_FILTER";
+  const col = i => ["#ffb340", "#ff6bd6", "#7cf3ff", "#b8ff6b", "#ffd36b", "#c9a0ff", "#6bffb8"][i % 7];
+  let ser = null;
+  if (S.mode === "time") { const y = ds[0].y; ser = await api("series", { fields: F.map(f => f.field).join(","), t0: y[0], t1: y[y.length - 1], n: 1500 }); }
+  axes.forEach((ax, k) => { if (!allAx && ax !== dbgAx) return; const s = k ? k + 1 : "";
+    F.forEach((f, j) => { const sc = (D.channels.find(c => c.field === f.field) || {}).scale || 1;
+      const x = S.mode === "time" ? ser[f.field].map(v => v > 0 ? v / sc : null) : f.hz, y = S.mode === "time" ? ser.t : f.thr;
+      out.push({ type: "scatter", mode: "lines", x, y, xaxis: `x${s}`, yaxis: `y${s}`, line: { color: col(j), width: S.mode === "time" ? 1.2 : 2.5 }, connectgaps: false, showlegend: false,
+        hovertemplate: `${f.label}: %{x:.0f} Hz<extra></extra>` }); }); });
+  return out;
 }
 const spFull = ds => { const y = ds[0].y; return [y[0], y[y.length - 1]]; };
 // vs-time spectrogram: ctrl+wheel scrolls through time, shift+wheel zooms time around the cursor
@@ -548,7 +597,7 @@ async function renderStep() {
   const none = sel.filter(i => !(d[i] && d[i].metrics)).map(i => `<div class="vd lv-info"><div class="hd">${AX[i]}<span class="badge lv-info">ℹ no data</span></div><span class="hint">Only ${d[i] ? d[i].n : 0} windows match (need 3). The fastest stick input in this range is ${mx.toFixed(0)} °/s, so widen the stick or throttle range.</span></div>`).join("");
   $("findings").innerHTML = pidHTML(d.pid) + `<div class="fh">Tune verdict (filtered gyro)</div><div class="verdicts">${cards}${none}</div>` +
     findingsHTML(sel.flatMap(i => (d[i] && d[i].findings) || []), `<div class="fh">What to change, and what it costs</div>`);
-  if ($("pidCopy")) $("pidCopy").onclick = () => { navigator.clipboard && navigator.clipboard.writeText($("pidCli").textContent); $("pidCopy").textContent = "Copied ✓"; };
+  document.querySelectorAll('#findings [data-go="plan"], #dash [data-go="plan"]').forEach(b => b.onclick = () => document.querySelector('#tabs [data-tab="plan"]').click());
 }
 
 // suggested PIDs for the next test flight (from the filtered-gyro step response, scaled to prop size)
@@ -566,8 +615,8 @@ function pidHTML(p) {
     <div class="pidcard lv-${anyCh ? "warning" : "good"}"><div class="hint">One cautious step (${p.step_pct}% for ${u.inch}″ props: bigger props get smaller steps). Based on the filtered-gyro step response${p.d_noisy ? "; D-term is already noisy, so damping is added by lowering P instead of raising D" : ""}. Fly, log, and check again.</div>
     <table class="pidt"><tr><th></th>${keys.map(k => `<th data-tip="${k}">${k}</th>`).join("")}</tr>${rows}</table><ul class="whys">${whys}</ul>
     ${sl ? `<div class="hint">Your PIDs come from the simplified sliders: easiest is to move the sliders instead. ${sl}</div>` : ""}
-    ${p.cli.length ? `<div class="clibox"><pre id="pidCli">${p.cli.join("\n")}\nsave</pre><button class="btn sm" id="pidCopy">Copy CLI</button></div>
-      <div class="hint">Typing exact values in the CLI turns the simplified sliders off. Check names with <code>get p_</code> on your firmware.</div>` : `<div class="hint">No change suggested.</div>`}</div>`;
+    ${p.cli.length ? `<div class="toplan"><span class="hint">These changes are in the Tune plan, together with the filter and mechanical steps, as one CLI block.</span><button class="btn sm" data-go="plan">Open the Tune plan →</button></div>`
+      : `<div class="hint">No change suggested.</div>`}</div>`;
 }
 
 // ---------- motor health ----------
@@ -932,7 +981,8 @@ function drawPwTrace(cv, t0, t1, t, e) {
 
 // ---------- SUMMARY: one-page tuning report ----------
 async function renderSummary() {
-  $("controls").innerHTML = `<div class="row2"><h3 data-tip="tab_summary">Tuning summary</h3><span class="hint">${S.range ? "selected part of the flight" : "whole flight"} · for ${S.profile ? S.profile.used.inch + "″ " + S.profile.used.blades + "-blade" : ""} props · click a card title to open its tab</span></div>`;
+  $("controls").innerHTML = `<div class="row2"><h3 data-tip="tab_summary">Tuning summary</h3><span class="hint">${S.range ? "selected part of the flight" : "whole flight"} · for ${S.profile ? S.profile.used.inch + "″ " + S.profile.used.blades + "-blade" : ""} props · click a card title to open its tab</span><span class="tspacer"></span><button class="btn sm" id="sumPdf" data-tip="report_pdf">⬇ PDF report</button></div>`;
+  $("sumPdf").onclick = () => makeReport();
   const safe = p => p.catch(() => ({ error: "not available" }));
   const [nz, st, mo, pt, mt, pw] = await Promise.all([
     api("noise", { ...rng(), res_prom: S.res.prom, res_persist: S.res.persist, res_mask: S.res.mask, res_fmax: resFmax() }),
@@ -1045,8 +1095,9 @@ function setupPlayer() {
   if (typeof PB === "undefined" || !S.meta) return;
   const cfg = PLAYER_TABS[S.tab] || {};
   PB.hooks = {};
-  $("dock").hidden = S.tab === "summary";            // the overview has no time axis: no timeline
-  if (S.tab === "summary") { PB.playing = false; unmountViewer(); document.querySelector(".maincard").classList.remove("split"); return; }
+  const noTime = ["summary", "plan", "compare"].includes(S.tab);   // pages without a time axis: no timeline
+  $("dock").hidden = noTime;
+  if (noTime) { PB.playing = false; unmountViewer(); document.querySelector(".maincard").classList.remove("split"); return; }
   mountPlayer();
   const split = !!(cfg.viewer && S.viewerOn && innerWidth > 1100);   // wide screens: 3D viewer beside the chart
   document.querySelector(".maincard").classList.toggle("split", split);
@@ -1076,7 +1127,7 @@ function healthLive(d, t) {
   $("hq-cap").textContent = `t ${t.toFixed(1)} s · live`;
 }
 
-const RENDER = { pidsim: () => renderPidSim(), propwash: renderPropwash, summary: renderSummary, tracking: renderTS, pid: renderTS, motors: renderTS, noise: renderNoise, spectro: renderSpectro, step: renderStep, health: renderHealth };
+const RENDER = { compare: () => renderCompare(), plan: () => renderPlan(), pidsim: () => renderPidSim(), propwash: renderPropwash, summary: renderSummary, tracking: renderTS, pid: renderTS, motors: renderTS, noise: renderNoise, spectro: renderSpectro, step: renderStep, health: renderHealth };
 const render = () => {
   if (!S.meta) return;
   const dash = S.tab === "summary";
@@ -1088,7 +1139,7 @@ const render = () => {
   renderTips();
   return busy(() => RENDER[S.tab](), TAB_BUSY[S.tab] || "Analysing").then(() => { updateBadge(S.tab, S._flist); if (typeof PB !== "undefined") PB.dirty = true; fitSide(); }).catch(e => console.error(e));
 };
-const TAB_BUSY = { summary: "Building the summary (all analyses)", tracking: "Loading flight traces", pid: "Analysing the PID terms", motors: "Analysing motor output",
+const TAB_BUSY = { compare: "Comparing the two flights (all analyses, both logs)", plan: "Building the tune plan (all analyses)", summary: "Building the summary (all analyses)", tracking: "Loading flight traces", pid: "Analysing the PID terms", motors: "Analysing motor output",
   noise: "Analysing noise and filters", spectro: "Computing spectrograms", step: "Computing step responses", propwash: "Finding throttle chops",
   pidsim: "Preparing the PID simulator", health: "Checking motors and props" };
 const LVORD = { serious: 0, warning: 1, info: 2, good: 3 };
@@ -1173,7 +1224,7 @@ setSide(store.get("sideCollapsed", false));
 })();
 
 async function loadLog() {
-  stopDemo(); S.simAck = null;
+  stopDemo(); S.simAck = null; S.cmp = null; if (typeof setCmpTab === "function") setCmpTab();
   S.range = null; S.meta = null; S.clim = null; S.fr = null; S.nfr = null; setRangeLabel(); Plotly.purge("main"); S._anShown = null;
   S.meta = await busy(() => api("meta"), "Opening the log");
   S.prop = store.get("prop:" + propKey(), null); S.auw = store.get("auw:" + propKey(), null);
@@ -1181,6 +1232,7 @@ async function loadLog() {
   setupPlayer();
   await renderOverview();
   await loadProfile();
+  cmpButton();
   render();
 }
 // ---------- prop size (drives size-aware analysis) ----------
@@ -1217,6 +1269,7 @@ async function setAuw(kg) {
   S.auw = kg; store.set("auw:" + propKey(), kg);
   await loadProfile(); render();
 }
+$("cmpBtn").onclick = () => openCompareDialog();
 $("propChip").onclick = () => { const b = document.querySelector('#tabs [data-tab="summary"]'); if (S.tab !== "summary") b.click(); setTimeout(() => $("profileCard") && $("profileCard").scrollIntoView({ behavior: "smooth", block: "center" }), 400); };
 async function setProp(v) {
   S.prop = v; store.set("prop:" + propKey(), v); S._res = {}; S._spec = {};

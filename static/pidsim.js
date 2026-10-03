@@ -315,7 +315,7 @@ function simPanel() {
     <table class="pidt gtab"><tr><th></th>${keys.map(k => `<th data-tip="${k}">${k}</th>`).join("")}</tr>${rows}</table>
     <div class="simf"><label class="ctl" data-tip="sim_gmul">Gyro LPF × <input id="simG" type="range" min="0.5" max="2" step="0.05" value="${SIMV.gmul}"><b id="simGv">${SIMV.gmul.toFixed(2)}</b></label>
       <label class="ctl" data-tip="sim_dmul">D-term LPF × <input id="simD" type="range" min="0.5" max="2" step="0.05" value="${SIMV.dmul}"><b id="simDv">${SIMV.dmul.toFixed(2)}</b></label></div>
-    <div class="simbtns"><button class="btn sm" id="simSug" data-tip="sim_suggest">✨ Suggest</button><button class="btn sm ghost" id="simReset">Reset to current</button><button class="btn sm ghost" id="simCli">Copy CLI</button></div>
+    <div class="simbtns"><button class="btn sm" id="simSug" data-tip="sim_suggest">✨ Suggest</button><button class="btn sm ghost" id="simReset">Reset to current</button><button class="btn sm ghost" id="simCli" data-tip="to_plan">Use in tune plan →</button></div>
     <div id="simOut"></div>`;
   $("findings").querySelectorAll(".gin").forEach(el => el.oninput = () => { SIMV.gains[el.dataset.a][el.dataset.k] = Math.max(0, +el.value || 0);
     el.classList.toggle("up", SIMV.gains[el.dataset.a][el.dataset.k] > SIMV.cur[el.dataset.a][el.dataset.k]); el.classList.toggle("down", SIMV.gains[el.dataset.a][el.dataset.k] < SIMV.cur[el.dataset.a][el.dataset.k]);
@@ -329,7 +329,8 @@ function simPanel() {
       [["P", "p"], ["I", "i"], ["D", "d"], ["Dmax", "d_max"], ["FF", "f"]].forEach(([k, cli]) => { if (Math.round(g[k]) !== Math.round(c[k])) L.push(`set ${cli}_${n} = ${Math.round(g[k])}`); }); });
     if (SIMV.gmul !== 1) L.push(`set simplified_gyro_filter_multiplier = ${Math.round(100 * SIMV.gmul)}`);
     if (SIMV.dmul !== 1) L.push(`set simplified_dterm_filter_multiplier = ${Math.round(100 * SIMV.dmul)}`);
-    L.push("save"); navigator.clipboard && navigator.clipboard.writeText(L.join("\n")); $("simCli").textContent = L.length > 1 ? "Copied ✓" : "No changes"; };
+    const n = sendToPlan("pids", L, "From the PID simulator: the gains (and filter multipliers) you tried there.");
+    $("simCli").textContent = n ? "In the tune plan ✓" : "No changes to add"; };
 }
 
 async function simRun() {

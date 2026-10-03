@@ -42,26 +42,13 @@ class Log:
         else:
             nm = Path(path).name
             progress(nm, idx, "decode", "Reading the log file", 0.0)
-            p = Parser.load(str(path), idx)
-            names = p.field_names
-            rows, trunc = [], None
-            it = p.frames()
-            total = max(1, getattr(p.reader, "_frame_data_len", 0) or 1)
-            while True:   # a log cut off by full flash / power loss ends in a broken frame: keep everything before it
-                try:
-                    f = next(it)
-                except StopIteration:
-                    break
-                except Exception as e:
-                    trunc = f"{type(e).__name__}: {e}"[:160]
-                    break
-                rows.append([np.nan if v == "" else v for v in f.data[:len(names)]])
-                if len(rows) % 4000 == 0:
-                    try:
-                        fr = p.reader.tell() / total
-                    except Exception:
-                        fr = None
-                    progress(nm, idx, "decode", f"Decoding frames · {len(rows) // 1000}k so far", None if fr is None else 0.02 + 0.88 * fr)
+            import fastbbl
+            try:   # fast decoder (same output as orangebox, see tests); orangebox itself for anything it can't handle
+                hdr, names, rows, trunc, _rd = fastbbl.decode(
+                    path, idx, lambda k, fr: progress(nm, idx, "decode", f"Decoding frames · {k // 1000}k so far", 0.02 + 0.88 * fr))
+                hdr = {k: v for k, v in hdr.items() if "Field" not in k}
+            except fastbbl.DecodeError:
+                hdr, names, rows, trunc = self._decode_orangebox(path, idx, nm)
             if len(rows) < 2:
                 raise ValueError(f"no decodable frames in sub-log {idx}" + (f" ({trunc})" if trunc else ""))
             progress(nm, idx, "decode", f"Tidying {len(rows) // 1000}k frames", 0.91)
@@ -78,15 +65,23 @@ class Log:
                 if bad.any() and not bad.all():
                     data[bad, j] = data[~bad, j][0]
             self.headers = {k: ",".join(map(str, v)) if isinstance(v, (list, tuple)) else v
-                            for k, v in p.headers.items() if not k.startswith("Field")}
+                            for k, v in hdr.items() if not k.startswith("Field")}
             if trunc:
                 self.headers["_truncated"] = trunc
             self.cols = {n: data[:, i].astype(np.float32) for i, n in enumerate(names)}
             self.cols["time"] = data[:, names.index("time")]  # keep µs precision
-            progress(nm, idx, "decode", "Saving a cache so next time is instant", 0.95)
-            tmp = cache.with_suffix(".tmp.npz")
-            np.savez_compressed(tmp, _headers=json.dumps(self.headers), **self.cols)
-            tmp.replace(cache)  # atomic: never read a half-written cache
+            # cache for instant re-opening, written in the background (atomic replace: never read half-written)
+            import threading
+            hd, cl = json.dumps(self.headers), dict(self.cols)
+
+            def _save():
+                tmp = cache.with_suffix(f".tmp{threading.get_ident()}.npz")
+                try:
+                    np.savez_compressed(tmp, _headers=hd, **cl)
+                    tmp.replace(cache)
+                except OSError:
+                    tmp.unlink(missing_ok=True)
+            threading.Thread(target=_save, daemon=True).start()
         t = self.cols["time"].astype(np.float64)
         self.t = (t - t[0]) / 1e6
         self.fs = 1.0 / np.median(np.diff(self.t))
@@ -94,8 +89,50 @@ class Log:
         self._derive()
         progress(Path(path).name, idx, "decode", done=True)
 
+    @staticmethod
+    def _decode_orangebox(path, idx, nm):
+        p = Parser.load(str(path), idx)
+        names = p.field_names
+        rows, trunc = [], None
+        it = p.frames()
+        total = max(1, getattr(p.reader, "_frame_data_len", 0) or 1)
+        while True:
+            try:
+                f = next(it)
+            except StopIteration:
+                break
+            except Exception as e:
+                trunc = f"{type(e).__name__}: {e}"[:160]
+                break
+            rows.append([np.nan if v == "" else v for v in f.data[:len(names)]])
+            if len(rows) % 4000 == 0:
+                progress(nm, idx, "decode", f"Decoding frames · {len(rows) // 1000}k so far", 0.02 + 0.88 * p.reader.tell() / total)
+        return p.headers, names, rows, trunc
+
     def _derive(self):
         c = self.cols
+        # Units, as Blackbox Explorer reads them. Betaflight logs gyro as whole °/s × gyro_scale (a float stored as its bit
+        # pattern, 1.0 on current firmware). With blackbox_high_resolution on, gyro, setpoint (roll/pitch/yaw) and
+        # rcCommand are logged ×10 (0.1 °/s steps); setpoint[3] (throttle, 0–1000) is not.
+        import struct
+        try:
+            gs = struct.unpack("<f", struct.pack("<I", int(self.headers.get("gyro_scale", 0x3F800000)) & 0xFFFFFFFF))[0]
+        except (ValueError, struct.error):
+            gs = 1.0
+        if not (0.01 < gs < 100) or "Betaflight" not in str(self.headers.get("Firmware type", "Betaflight")):
+            gs = 1.0
+        hr = 10.0 if float(self.headers.get("blackbox_high_resolution", 0) or 0) > 0 else 1.0
+        self.units = dict(gyro_scale=gs, high_res=hr > 1, step_dps=round(gs / hr, 3))
+        for i in range(3):
+            for k in ("gyroADC", "gyroUnfilt"):
+                if f"{k}[{i}]" in c and (gs != 1.0 or hr != 1.0):
+                    c[f"{k}[{i}]"] = (c[f"{k}[{i}]"] * (gs / hr)).astype(np.float32)
+            if hr != 1.0 and f"setpoint[{i}]" in c:
+                c[f"setpoint[{i}]"] = (c[f"setpoint[{i}]"] / hr).astype(np.float32)
+        if hr != 1.0:
+            for i in range(4):
+                if f"rcCommand[{i}]" in c:
+                    c[f"rcCommand[{i}]"] = (c[f"rcCommand[{i}]"] / hr).astype(np.float32)
         lo, hi = (float(x) for x in str(self.headers.get("motorOutput", "48,2047")).split(",")[:2])
         for i in range(8):
             if f"motor[{i}]" in c:
@@ -128,10 +165,26 @@ class Log:
             s["thr_hist_s"] = (np.histogram(c["throttle%"], bins=10, range=(0, 100))[0] / self.fs).round(1).tolist()
         if "gyroADC[0]" in c:
             s["max_rate_dps"] = int(max(np.max(np.abs(c[f"gyroADC[{i}]"])) for i in range(3)))
-        return {"stats": s, "fields": sorted(c), "headers": self.headers,
+        import debugmodes
+        try:
+            dbg = debugmodes.report(self)
+        except Exception as e:      # never let an unknown debug layout break opening a log
+            dbg = {"mode": None, "error": str(e)[:120], "channels": []}
+        return {"stats": s, "fields": sorted(c), "headers": self.headers, "units": self.units, "debug": dbg,
                 "key_headers": {k: self.headers[k] for k in KEY_HEADERS if k in self.headers}}
 
-    def series(self, fields, t0=None, t1=None, n=2000):
+    def _smoothed(self, f, sl, smooth_ms):
+        """Centred moving average over smooth_ms (Blackbox Explorer's trace smoothing, 3 ms by default there) for gyro
+        fields; everything else, or smooth_ms = 0, is returned as logged."""
+        x = self.cols[f]
+        k = int(round(smooth_ms / 1000 * self.fs)) if smooth_ms else 0
+        if k < 2 or not f.startswith("gyro"):
+            return x[sl]
+        a, b = max(0, sl.start - k), min(len(x), sl.stop + k)       # margin so the edges are averaged like the middle
+        y = np.convolve(x[a:b].astype(np.float64), np.ones(k) / k, "same")
+        return y[sl.start - a: sl.start - a + (sl.stop - sl.start)].astype(np.float32)
+
+    def series(self, fields, t0=None, t1=None, n=2000, smooth_ms=0):
         """Min/max-envelope decimation so spikes survive downsampling."""
         sl = self.window(t0, t1)
         t = self.t[sl]
@@ -141,12 +194,12 @@ class Log:
         if step == 1:
             out["t"] = t.tolist()
             for f in fields:
-                out[f] = self.cols[f][sl].round(2).tolist()
+                out[f] = self._smoothed(f, sl, smooth_ms).astype(np.float64).round(2).tolist()
             return out
         tb = t[:m].reshape(-1, step)
         out["t"] = np.column_stack([tb[:, 0], tb[:, step // 2]]).ravel().tolist()
         for f in fields:
-            y = self.cols[f][sl][:m].reshape(-1, step)
+            y = self._smoothed(f, sl, smooth_ms)[:m].astype(np.float64).reshape(-1, step)
             mn, mx, amn = y.min(1), y.max(1), y.argmin(1) < y.argmax(1)
             out[f] = np.where(amn[:, None], np.column_stack([mn, mx]), np.column_stack([mx, mn])).ravel().round(2).tolist()
         return out

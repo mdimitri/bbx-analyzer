@@ -77,10 +77,10 @@ def meta(name: str, idx: int):
 
 
 @app.get("/api/{name}/{idx}/series")
-def series(name: str, idx: int, fields: str, t0: float = None, t1: float = None, n: int = Query(2000, le=20000)):
+def series(name: str, idx: int, fields: str, t0: float = None, t1: float = None, n: int = Query(2000, le=20000), smooth: float = Query(0, ge=0, le=50)):
     lg = get(name, idx)
     fs = [f for f in fields.split(",") if f in lg.cols]
-    return lg.series(fs, t0, t1, n)
+    return lg.series(fs, t0, t1, n, smooth)
 
 
 @app.get("/api/{name}/{idx}/psd")
@@ -141,6 +141,35 @@ def simmodel(name: str, idx: int, prop: float = None, blades: int = None, auw: f
     return get(name, idx).simmodel(prop, blades, auw)
 
 
+@app.get("/api/{name}/{idx}/plan")
+def plan_(name: str, idx: int, prop: float = None, blades: int = None, auw: float = None):
+    import plan
+    return plan.build_plan(get(name, idx), prop, blades, auw)
+
+
+@app.get("/api/{name}/{idx}/report")
+def report_(name: str, idx: int, prop: float = None, blades: int = None, auw: float = None):
+    import plan
+    return plan.report_data(get(name, idx), prop, blades, auw)
+
+
+@app.get("/api/compare")
+def compare_(a: str, b: str, ai: int = 1, bi: int = 1, pa: float = None, ba: int = None, wa: float = None,
+             pb: float = None, bb: int = None, wb: float = None):
+    """Before (a) vs after (b). Each flight is analysed with its own prop size / weight (as set for its craft)."""
+    import plan
+    from bbl import progress
+    A, B = get(a, ai), get(b, bi)
+    progress(b, bi, "compare", "Analysing the first flight", 0.05)
+    ga = plan.gather(A, pa, ba, wa)
+    progress(b, bi, "compare", "Analysing the second flight", 0.5)
+    gb = plan.gather(B, pb, bb, wb)
+    progress(b, bi, "compare", done=True)
+    out = plan.compare(A, B, ga, gb)
+    out["plan_b"] = plan.build_plan(B, pb, bb, wb, gb)
+    return out
+
+
 @app.get("/api/{name}/{idx}/{kind}")
 def flight(name: str, idx: int, kind: str, t0: float = None, t1: float = None, prop: float = None, blades: int = None,
            chop: float = None, drop: float = None, win: float = None, stick: float = None, skip: float = None, flo: float = None, fhi: float = None, minev: int = None):
@@ -160,3 +189,4 @@ def index():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)
+
