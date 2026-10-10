@@ -4,33 +4,39 @@ A small Python backend (FastAPI + numpy) with a single-page Plotly frontend.
 
 ## Start it
 See the main [README](../README.md). The launchers (`start.bat`, `start.command` → `start.sh`) create a private `.venv`
-in the project folder with Python 3.10–3.13 (preferring 3.13 → 3.10). If none is installed, or package install fails with
+in the project folder with Python 3.10–3.13 (preferring 3.13 → 3.10), and add `numba` when a wheel exists for it (optional). If none is installed, or package install fails with
 it, they fetch a private Python 3.12 with [uv](https://docs.astral.sh/uv/) into `.tools/`. Dependencies are reinstalled
 only when `requirements.txt` changes. First successful start creates an app shortcut with the icon (Windows: Desktop +
 folder `.lnk`; macOS: `BBX Analyzer.app` in the folder; Linux: `~/.local/share/applications/bbx-analyzer.desktop`).
 Plotly is bundled in `static/vendor/`, so the app works offline after the first setup.
 
-Drop `.BBL` files onto the page or into `logs/`. The first open decodes the log (~10 s for a 9 MB log, with live progress).
+Drop `.BBL` files onto the page or into `logs/`. The first open decodes the log (a few seconds for a 9 MB log, with live progress).
 After that it's cached as `logs/<name>.<n>.npz` and loads in under half a second.
 
 ## Layout
 | file | what |
 |---|---|
-| `app.py` | API routes, decode lock, LRU of open logs |
-| `bbl.py` | decode → numpy columns, derived fields, spectrogram, step response |
-| `tuning.py` | Betaflight filter models (PT1/PT2/PT3/biquad/notch/RPM/dyn-notch from header), noise report, step metrics and the advice rules |
-| `flight.py` | PID-term balance (I bias, wind-up, PID-sum clipping, D/P noise share, FF jitter), motor-output headroom (100 % / minimum hits, hover output, command buzz), propwash after throttle chops and stick-to-motion latency |
-| `sim.py` | PID simulator model: motor lag/delay measured from eRPM, effective P/D gains measured from the logged terms, plant (authority, damping, yaw spin-up torque) fitted by closed-loop output error + frequency response; per-craft memory for axes a flight didn't exercise |
+| `version.py` | the version, single source (API, header badge, PDF, CLI header, launchers check it) |
+| `app.py` | API routes, decode lock, LRU of open logs, `/api/progress`, compiles the simulator kernels at start-up |
+| `bbl.py` | `Log`: decode → numpy columns, units, derived fields, spectrogram, step response; caches (`.npz`, `.sim.json`); `progress()` / `Job` |
+| `fastbbl.py` | specialised blackbox decoder, bit-identical to orangebox, ~4× faster; orangebox is the fallback |
+| `debugmodes.py` | `debug_mode` enum tables per firmware (they differ: FFT_FREQ is 17 in 4.3–4.5, 16 in 2025.x), decoded debug channels |
+| `tuning.py` | Betaflight filter models (PT1/PT2/PT3/biquad/notch/RPM/dyn-notch from the header), noise report, filter planner, step metrics and advice |
+| `delay.py` | Filter delay tab: per-stage delay at the crossover, specs, closed-form explanations, what-ifs, reference setups, margins, sweeps, headroom, self-oscillation check |
+| `flight.py` | PID-term balance, motor-output headroom, propwash after throttle chops, stick-to-motion latency |
+| `sim.py` | PID simulator model: motor lag/delay from eRPM, effective P/D gains from the logged terms, plant fitted by closed-loop output error + frequency response; per-craft memory |
+| `simcore.py` | numba kernels for the simulator's inner loops (optional; bit-identical to the numpy path) |
+| `quad.py` | quad profile: prop size, blade count and all-up weight from the log, size-scaled references, typical dynamics |
+| `motors.py` | motor & prop health: per-motor order tracking, load balance, speed per command, desyncs, battery waste |
+| `plan.py` | tune plan (all findings in order, one CLI), scorecard, before → after comparison, report data |
+| `static/app.js` | state → fetch → Plotly, tabs, busy/progress panel, tooltips |
+| `static/delay.js`, `plan.js`, `compare.js`, `report.js` | Filter delay tab, Tune plan, Before → after, PDF report (jsPDF + DejaVu fonts in `static/vendor/`) |
 | `static/pidsim.js` | browser-side closed-loop simulation at the PID loop rate, loop margins / sensitivity, auto-suggest |
-| `quad.py` | quad profile: prop size & blade count estimated from the log (hover motor speed + weight prior, blade-pass harmonics), size-scaled reference values |
-| `motors.py` | motor & prop health: per-motor order tracking (1×/2×/3×), load balance (CG / yaw / single motor), RPM-per-command, desync detection |
-| `static/player.js` | playback: timeline player (play/pause, drag-scrub, speed/zoom), canvas 3D quad viewer (Mahony attitude, wobble & shake layers), live hooks |
-| `static/timesync.js` | synced time navigation: drag-to-pan on every time chart; click a chart, then the wheel zooms; all time axes and the docked playback strip share one view window; during playback the playhead stays centred and the data scrolls |
-| `static/planner.js` | Noise tab → Filter planner: what-if notches / low-pass changes on the measured spectra, delay, CLI |
-| `static/behaviour.js` | PID terms → Behaviour: still-stick term spectra, oscillation type, D vibration, P–D / FF balance |
-| `static/about.js` | About dialog (author, thanks, licence) |
-| `static/glossary.js` | tooltip texts (TL;DR + detailed) and sidebar grouping. Edit freely |
-| `static/` | `index.html`, `style.css` (light/dark tokens), `app.js` (state → fetch → Plotly) |
+| `static/player.js`, `timesync.js`, `video.js`, `demo.js` | playback + 3D viewer, synced time navigation, DVR video, the no-log demo |
+| `static/planner.js`, `behaviour.js` | filter planner (Noise tab), PID-term behaviour |
+| `static/glossary.js` | tooltip texts (TL;DR + detail) and sidebar grouping |
+| `tools/release.py` | release checks, screenshots / banner / sample report from the app, the zip |
+| `tests/` | decoder parity, units, debug modes, filter maths, compiled vs numpy simulator, model cache, all analyses, API |
 
 ## API (`/api/{file}/{sublog}/…`, all take optional `t0,t1` seconds)
 - `meta`: stats, field list, all headers, key tuning headers
@@ -45,17 +51,18 @@ After that it's cached as `logs/<name>.<n>.npz` and loads in under half a second
 - `pidterms`, `motorout`, `propwash` (all take `t0,t1,prop,blades`): interpretation layers for the PID terms (incl. `behaviour`), Motors and Propwash tabs. `propwash` also takes the detection settings `chop` (%/s), `drop` (%), `win` (s), `stick` (°/s²), `skip` (ms), `flo`/`fhi` (Hz), `minev`
 - `filterplan?prom&persist&mask&fmax`: spectra, current filter stages, notch proposals, RPM-fade fix for the filter planner
 - `step?win_s&min_sp&max_sp&thr_min&thr_max&src`: step response (`src=gyroADC` filtered, default, or `gyroUnfilt` raw), median + IQR + n per axis, metrics, verdict, costed suggestions, suggested PIDs
+- `simmodel?prop&blades&auw`: the learned plant per axis, measured motor dynamics (lag, delay, speed law), validation replay segment, typical-quad comparison
+- `delay?prop&blades&ref=bf|size`: the Filter delay analysis (below)
+- `plan`, `report`: the tune plan; everything the PDF needs. `/api/compare?a&b&ai&bi&…`: before → after
+- `/api/progress?name&idx`: live steps of slow jobs (decode, sim, delay, plan, report, compare); `/api/version`
 
 ## How the advice works
 All advice comes from heuristics. Treat it as a starting point, and change one thing at a time.
-- **Filter delay** = phase delay at 100 Hz of the low-pass stages, modelled at the window's mean throttle.
+- **Filter delay (Noise tab)** = phase delay at 100 Hz of the low-pass stages, modelled at the window's mean throttle: a quick size guide. The Filter delay tab does it properly (below).
 - **RPM filter check** tracks each motor's eRPM per 0.25 s window and compares raw vs filtered gyro at exactly those harmonics.
 - **Frame resonances** = peaks that remain in the raw gyro after masking out all motor harmonics.
 - **Step metrics** come from the 6 ms-smoothed median step response. Thresholds live in `tuning.step_advice`. The shaded band is the 95% CI of the median (1.2533·σ/√n, σ from the IQR) or the IQR itself. Filtered gyro is the default: it is what the PID loop sees and gives a tighter estimate; raw gyro shows the latency the filters add.
 - **Suggested PIDs** (`tuning.pid_suggest`) take one cautious step from the filtered-gyro metrics: overshoot → more D (or less P when the D-term is already noisy), slow rise → more P/FF, ringing → more D or less P, steady-state error → I. Step size shrinks with prop size (12 % at 5″). Needs ≥ 10 windows per axis. Output includes a CLI snippet and slider equivalents when simplified tuning is on.
-
-## Derived fields
-`throttle%`, `motor%[i]` (from `motorOutput` range), `motorHz[i]` (bidir eRPM ÷ pole pairs).
 
 ## Adding an analysis
 1. Add a method on `Log` in `bbl.py` that returns JSON-able dicts.
@@ -77,20 +84,77 @@ All advice comes from heuristics. Treat it as a starting point, and change one t
 ## No log yet
 With no logs in `logs/` (or `/?demo=1`) the app shows the 3D quad flying a synthetic freestyle routine until you drop a .BBL: trick names on screen, speed 0.1–1× and pause (Space), drag to orbit and wheel to zoom in every camera, prop-wash particles.
 
-## Licence
-© Martin Dimitrievski. Free to use, reuse, modify and share for non-commercial purposes; see `LICENSE`.
+## Units and logging
+`gyro_scale` is stored as a float bit pattern; with `blackbox_high_resolution` gyro, raw gyro, setpoint and rcCommand are
+logged ×10 (0.1 °/s steps) and divided back. PID terms are in Betaflight's internal units; the mixer moves a motor by
+PID sum / 10 %. Derived: `throttle%`, `motor%[i]` (from the `motorOutput` range), `motorHz[i]` (bidirectional eRPM ÷ pole pairs).
+
+## Filter delay
+- Every stage is evaluated with Betaflight's own difference equations at the rate it really runs (gyro LPF2 at the gyro
+  rate; LPF1, notches, RPM filter, every D-term filter at the PID rate), dynamic low-passes at the hover throttle
+  (`dynLpfCutoffFreq`, or `dynThrottle` when expo = 0), RPM notches at each motor's median speed with the firmware's
+  fade-in (weight = margin / fade range above `rpm_filter_min_hz`) and cap (0.48 × PID rate), dynamic notches at the
+  logged centres (FFT_FREQ), else the residual noise peaks, else the minimum.
+- Phase delay of a stage at f: τφ = −∠H/ω. Delays of cascaded stages add, and a stage takes exactly 360°·f·τφ of phase,
+  so the stacked bar is the phase budget. Each stage also gets the closed-form rule (PT1 ≈ 1/(2π·fc), PTn ≈ n/(2π·k·fc)
+  with Betaflight's cutoff correction k, biquad ≈ √2/(2π·fc), notch ≈ weight/(Q·2π·f0) below its centre).
+- Open loop L = plant × PID: plant b·e^(−s(d+1.5T))·(1+λτs)/((1+τs)(s+a)) from the simulator; PID on measurement
+  C = (P + I·T/(1−z⁻¹) + D·(1−z⁻¹)/T·F_D)·F_G. Crossover where |L| = 1, phase margin 180° + ∠L there, gain margin,
+  peak sensitivity max |1/(1+L)|. The model range repeats this on the equally good fits at the ends of the allowed motor-lag range.
+- **Reference**: Betaflight's firmware defaults (sensors/gyro.h, flight/pid.h, pg/dyn_notch.c, pg/rpm_filter.c: gyro
+  LPF1 PT1 250–500 Hz dynamic, LPF2 PT1 500 Hz, D-term LPF1 PT1 75–150 Hz dynamic, LPF2 PT1 150 Hz, 3 dynamic notches
+  Q 3.0 100–600 Hz, RPM 3 harmonics Q 5.0 from 100 Hz fade 50 Hz, yaw P low-pass 100 Hz), or those with the low-pass
+  cutoffs and notch minimums × (5/size)^0.8. Run on this quad's loop rates, motors and plant, so only the filters differ;
+  its dynamic notches go where a tracker would put them on your spectrum.
+- **What-ifs** rebuild the whole filter chain with one change and recompute the loop (exact for the model, not a delay estimate).
+- **Checks against the log**: predicted vs logged PID noise above 80 Hz; the model's sensitivity peak vs the measured
+  propwash ringing; and the self-oscillation check: the strongest 10–40 Hz component of gyro − setpoint with the sticks
+  within ±15 °/s of centre; ≥ 12 dB above the band and ≥ 2 °/s counts as self-sustained (flagged with the model's margin).
 
 ## PID simulator
 The **PID simulator** tab learns each axis' rotation dynamics from the log (a blocking warning explains its limits the first time it is opened for each log):
-`dω/dt = b·m − a·ω`, `τ·dm/dt = u(t − delay) − m`, with `u` the Betaflight PID sum (the logged units).
-b (control authority), τ (motor + prop lag), the delay and a (aero damping) are found by **closed-loop output error**:
-the logged setpoint drives a Betaflight-accurate controller closed around a candidate plant, and the candidate whose
-simulated gyro best matches the logged gyro wins (vectorised grid search, refined twice, ~20 s, cached). Driving the
-model from the sticks rather than from the logged PID output avoids the bias that disturbance feedback puts on open-loop
-fits (checked: open-loop and equation-error fits on the same data came out unstable/meaningless).
-On the sample log the model reproduces the logged gyro from the sticks at 75 / 77 / 52 % (roll / pitch / yaw) over 32
-one-second pieces, and 79–93 % on the 3 s replay windows. The controller model was checked against the logged terms:
-P scale 0.0320 (BF 0.032029), D scale 0.00052–0.00058 (BF 0.000529), FF 0.016 on clean stick moves (BF 0.0165 at FF 120).
-In the browser, edits run through the same loop at the PID loop rate: step response (vs the measured one), disturbance
-kick, replay of your real stick inputs (vs the real gyro), and linear loop analysis (Ms, phase / gain margin, |S|).
-Size-aware: motor-lag prior 4 ms/inch + 4 ms, poor fits are pulled toward it and flagged.
+`dω/dt = b·(m + λ·(u_d − m)) − a·ω`, `τ·dm/dt = u_d − m`, with `u_d` the Betaflight PID sum (logged units) after the delay.
+- **Motor lag τ and delay** come from motor command vs eRPM (frequency response on the band where they're coherent,
+  ≈2 % steps). τ shortens with rotor speed: τ ∝ speed^−k, k measured from the flight's slowest, middle and fastest thirds
+  when they show a clean monotonic trend over a ×1.3 speed span, else 0.5; applied to every flight segment.
+- **Authority b, damping a, yaw spin-up λ** are found by closed-loop output error: the logged setpoint drives a
+  Betaflight-accurate controller (P, I with relax, D with D-max boost, logged FF, TPA and gains measured from the logged
+  terms, the full filter chain incl. every RPM notch) around candidate plants; the best match to the logged gyro below
+  30 Hz plus the setpoint → gyro frequency response (3–30 Hz) wins. Grid search refined twice.
+- **τ may move only ±15 % from the measurement.** Stick inputs (excited to ~8–16 Hz) can't separate lag from authority:
+  left free, the fit slid along a flat optimum (fit within 1 % from 23 to 62 ms) and landed between 26 and 68 ms on
+  flights of the same quad. Pinned, roll/pitch/yaw stay with the measured 36–43 ms at no measurable cost in fit.
+- On the demo log the model reproduces the logged gyro from the sticks at 89 / 86 / 90 % (roll / pitch / yaw).
+  The controller model was checked against the logged terms: P scale 0.0320 (BF 0.032029), D scale 0.00052–0.00058
+  (BF 0.000529), FF 0.016 on clean stick moves (BF 0.0165 at FF 120).
+- In the browser, edits run through the same loop at the PID loop rate: step response (vs the measured one),
+  disturbance kick, replay of your real stick inputs (vs the real gyro), linear loop analysis (Ms, phase / gain margin, |S|).
+- Without eRPM the lag is a size prior (4 ms/inch + 17 ms), fitted per axis, and flagged as less certain.
+
+## Motor health: desyncs
+A dropout is the measured speed falling below 60 % of the speed the command predicts for ≥ 5 ms. The prediction runs
+the command through the motor's measured delay and lag and the flight's own command → speed map, so a prop spinning
+down after a chop or speed swings lagging the command in an oscillation don't count. Exact zeros that recover within
+10 ms are telemetry glitches.
+
+## Speed and caching
+- Decoded logs: `logs/<name>.<n>.npz` (rebuilt when the log is newer).
+- Learned models: `logs/<name>.<n>.sim.json`, keyed by a fingerprint of the model code, so a code change invalidates it.
+- `numba` (optional) compiles the simulator loops (one lane per thread, no GIL, so progress polling keeps answering);
+  `BBX_NO_JIT=1` forces the numpy path. Kernels are compiled in the background at start-up and cached by numba.
+- Typical times on a 4.5-minute 1 kHz log, 2 cores: learning the model ~4 s (15 s without numba), Filter delay
+  analysis ~0.6 s, the whole Filter delay tab cold ~5.5 s, after a restart ~1.7 s.
+
+## Progress
+`bbl.progress(name, idx, task, detail, frac, steps=, step=, nxt=, eta=, note=)`: frac is where the task is, nxt where the
+current piece of work ends and eta how long it should take, so the browser glides the bar between them; steps get a
+one-line result (note) and their time. A task started inside another (the model inside the Filter delay analysis or the
+report) shows nested under the outer task's current step.
+
+## PDF report
+Made in the browser from `/report`: page 1 profile, key numbers, priorities, flight timeline; then stick response & PID
+terms, noise & filters (spectra, noise-by-throttle heatmaps, filter delay vs the defaults, margins), propwash &
+stability, motors & power, the learned dynamics, the tune plan with its CLI, before → after, all findings.
+
+## Licence
+© Martin Dimitrievski. Free to use, reuse, modify and share for non-commercial purposes; see `LICENSE`.

@@ -1,2 +1,6 @@
+# for running the tests and making releases (users don't need any of this)
 pytest>=7
 httpx>=0.24
+# tools/release.py docs: screenshots and the sample report from the real app (then: python -m playwright install chromium)
+playwright>=1.40
+pillow>=9
