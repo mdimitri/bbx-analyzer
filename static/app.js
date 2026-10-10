@@ -36,33 +36,71 @@ const api = (path, q = {}) => {
 const API_CACHE = new Map();
 let BBX_VERSION = "2.0";
 fetch("/api/version").then(r => r.json()).then(v => { BBX_VERSION = v.version; const e = document.getElementById("ver"); if (e) e.textContent = "v" + v.version.replace(/\.0$/, ""); }).catch(() => {});
-// ---- busy indicator: what is running, live progress from the server (/api/progress) when it knows it, elapsed time ----
-const BUSY = { jobs: [], timer: 0, t0: 0 };
-const SRV_TASK = { decode: "Decoding the log", sim: "Learning this quad's dynamics", compare: "Comparing the two flights" };
+// ---- busy indicator: what is running and why it takes time. The server reports each task's named steps, where it is
+// (frac), where the current piece of work will end (nxt) and how long that piece should take (eta); the bar glides
+// between those points so it moves continuously instead of jumping. A task started inside another one (the learned
+// model inside the filter-delay analysis) shows as a sub-line under the outer task's current step. ----
+const BUSY = { jobs: [], timer: 0, t0: 0, shown: 0, key: "", left: null };
+const SRV_TASK = { compare: "Comparing the two flights", plan: "Building the tune plan", report: "Preparing the report", delay: "Analysing the filter delay",
+  sim: "Learning this quad's dynamics", decode: "Decoding the log", cmp: "Analysing the flight" };
+const TASK_ORDER = ["compare", "cmp", "plan", "report", "delay", "sim", "decode"];
 const busy = async (fn, label = "Working") => {
   const job = { label, t0: performance.now() }; BUSY.jobs.push(job);
-  if (!BUSY.timer) { BUSY.t0 = performance.now(); $("busy").hidden = false; busyTick(); BUSY.timer = setInterval(busyTick, 350); }
+  if (!BUSY.timer) { BUSY.t0 = performance.now(); BUSY.shown = 0; BUSY.key = ""; BUSY.left = null; $("busy").hidden = false; busyTick(); BUSY.timer = setInterval(busyTick, 300); }
   try { return await fn(); } finally {
     BUSY.jobs.splice(BUSY.jobs.indexOf(job), 1);
     if (!BUSY.jobs.length) { clearInterval(BUSY.timer); BUSY.timer = 0; $("busy").hidden = true; }
   }
 };
+// progress of one task now: its reported point, glided towards the end of the current piece of work (never reaching it
+// early: an exponential approach with the expected duration as time constant)
+const taskFrac = t => {
+  if (t.frac == null) return null;
+  if (t.nxt == null || !(t.nxt > t.frac)) return t.frac;
+  const tau = Math.max(0.15, t.eta || 1), x = (t.since || 0) / tau;
+  return t.frac + (t.nxt - t.frac) * (x < 1 ? 0.9 * x : 1 - 0.1 * Math.exp(1 - x));
+};
+const fmtS = s => s < 1 ? "<1 s" : s < 60 ? `${Math.round(s)} s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`;
 async function busyTick() {
   const job = BUSY.jobs[BUSY.jobs.length - 1]; if (!job) return;
-  let title = job.label, detail = BUSY.jobs.length > 1 ? `${BUSY.jobs.length} tasks running` : "", frac = null;
-  if (S.file) {
-    try {
-      const pr = await fetch(`/api/progress?name=${encodeURIComponent(S.file)}&idx=${S.sub}`).then(r => r.json());
-      const k = ["decode", "sim", "compare"].find(k => pr[k]);
-      if (k) { title = SRV_TASK[k]; detail = pr[k].detail; frac = pr[k].frac; }
-    } catch (e) {}
-  }
+  let pr = {};
+  if (S.file) { try { pr = await fetch(`/api/progress?name=${encodeURIComponent(S.file)}&idx=${S.sub}`).then(r => r.json()); } catch (e) {} }
   if (!BUSY.jobs.length) return;
-  const el = Math.round((performance.now() - job.t0) / 1000);
+  const act = TASK_ORDER.filter(k => pr[k]), outer = act[0] ? pr[act[0]] : null, inner = act[1] ? pr[act[1]] : null;
+  const el = (performance.now() - job.t0) / 1000;
+  let frac = null, steps = "", title = job.label, detail = BUSY.jobs.length > 1 ? `${BUSY.jobs.length} tasks running` : "";
+  if (outer) {
+    title = SRV_TASK[act[0]] || job.label;
+    const fi = inner ? taskFrac(inner) : null;
+    frac = inner && fi != null && outer.nxt != null ? outer.frac + (outer.nxt - outer.frac) * fi : taskFrac(outer);
+    const sub = (t, k) => {   // the inner task as one compact block: its finished steps with results, the live detail, a thin bar
+      const done = (t.steps || []).slice(0, t.step || 0).map((s, i) => `<span class="bdone">✓ ${esc(s)}${t.notes && t.notes[i] ? ` <em>${esc(t.notes[i])}</em>` : ""}</span>`).join("");
+      return `<div class="bsub"><div class="bsubh">${esc(SRV_TASK[k] || k)}${t.steps ? ` · ${esc(t.steps[t.step] || "")}` : ""}</div>${done ? `<div class="bsubd">${done}</div>` : ""}
+        <div class="bdet">${esc(t.detail || "")}</div><div class="bbar thin"><i style="width:${Math.round((taskFrac(t) || 0) * 100)}%"></i></div></div>`;
+    };
+    if (outer.steps) {
+      steps = outer.steps.map((s, i) => {
+        const st = i < outer.step ? "done" : i === outer.step ? "cur" : "todo";
+        const tm = outer.times && outer.times[i] != null ? `<small>${outer.times[i]} s</small>` : st === "cur" ? `<small>${Math.round(outer.in_step || 0)} s</small>` : "";
+        const nt = outer.notes && outer.notes[i] ? `<em>${esc(outer.notes[i])}</em>` : "";
+        const body = st === "cur" ? (inner ? sub(inner, act[1]) : `<div class="bdet">${esc(outer.detail || "")}</div>`) : "";
+        return `<li class="${st}"><span class="bi">${st === "done" ? "✓" : st === "cur" ? "▸" : "○"}</span><div><div class="bl">${esc(s)} ${nt}${tm}</div>${body}</div></li>`;
+      }).join("");
+      detail = "";
+    } else detail = outer.detail || "";
+  }
+  // never go backwards within one job; estimate the time left from the average pace so far
+  const key = act.join("|");
+  if (frac != null) { frac = Math.min(0.995, Math.max(frac, key === BUSY.key ? BUSY.shown : 0)); BUSY.shown = frac; }
+  BUSY.key = key;
+  let left = null;
+  if (frac != null && frac > 0.06 && el > 1.5) { const est = el * (1 - frac) / frac; BUSY.left = BUSY.left == null ? est : 0.6 * BUSY.left + 0.4 * est; left = BUSY.left; }
   $("busyT").textContent = title + "…";
-  $("busyD").textContent = [detail, el >= 2 ? `${el} s` : ""].filter(Boolean).join(" · ");
+  $("busyS").innerHTML = steps ? `<ol class="bsteps">${steps}</ol>` : "";
+  $("busyD").textContent = detail;
+  $("busyE").textContent = [el >= 1 ? `${fmtS(el)} elapsed` : "", left != null && left > 0.8 ? `about ${fmtS(left)} left` : ""].filter(Boolean).join(" · ");
   $("busyBar").classList.toggle("ind", frac == null);
-  $("busyBar").style.width = frac == null ? "" : Math.round(frac * 100) + "%";
+  $("busyBar").style.width = frac == null ? "" : (frac * 100).toFixed(1) + "%";
   $("busyP").textContent = frac == null ? "" : Math.round(frac * 100) + "%";
 }
 const rng = () => S.range ? { t0: S.range[0], t1: S.range[1] } : {};

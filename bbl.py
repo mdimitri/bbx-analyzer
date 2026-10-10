@@ -1,6 +1,7 @@
 """Blackbox decoding (via orangebox), caching and analysis — numpy only."""
 from pathlib import Path
 import json
+import threading
 import numpy as np
 from orangebox import Parser
 
@@ -20,13 +21,60 @@ import time as _time
 PROGRESS = {}
 
 
-def progress(name, idx, task, detail="", frac=None, done=False):
+def progress(name, idx, task, detail="", frac=None, done=False, steps=None, step=None, nxt=None, eta=None, note=None):
+    """Report progress of a slow task. frac: where the task is now (0..1); nxt: where it will be when the current piece
+    of work ends, and eta: how long that piece is expected to take (s), so the browser can move the bar smoothly in
+    between instead of jumping. steps / step: the task's named steps and the current one; note: a one-line result of
+    the step that just finished (shown next to it)."""
     d = PROGRESS.setdefault(f"{name}|{idx}", {})
     if done:
         d.pop(task, None)
         return
-    cur = d.get(task)
-    d[task] = {"detail": detail, "frac": None if frac is None else round(float(frac), 3), "t0": cur["t0"] if cur else _time.time()}
+    now = _time.time()
+    cur = d.get(task) or {}
+    fr = None if frac is None else round(float(frac), 4)
+    e = {"detail": detail, "frac": fr, "nxt": None if nxt is None else round(float(nxt), 4), "eta": None if eta is None else round(float(eta), 2),
+         "t0": cur.get("t0", now), "ts": now if (fr != cur.get("frac") or step != cur.get("step")) else cur.get("ts", now),
+         "steps": steps if steps is not None else cur.get("steps"), "step": step if step is not None else cur.get("step"),
+         "notes": dict(cur.get("notes") or {}), "times": dict(cur.get("times") or {}), "tstep": cur.get("tstep", now)}
+    if step is not None and step != cur.get("step"):
+        if cur.get("step") is not None:
+            e["times"][str(cur["step"])] = round(now - cur.get("tstep", now), 1)
+        e["tstep"] = now
+    if note is not None and e["step"] is not None:
+        e["notes"][str(e["step"] if step is None else step)] = note
+    d[task] = e
+
+
+class Job:
+    """A task made of weighted named steps: with Job(lg, "delay", [("Gyro noise", 1), ...]) as j: j.step(0, "detail") …
+    j.sub(0.4, "detail") moves within the current step; j.done(i, "result") notes the result of step i."""
+
+    def __init__(self, lg, task, steps):
+        self.name, self.idx, self.task = lg.path.name, lg.idx, task
+        self.labels = [s[0] for s in steps]
+        w = np.array([float(s[1]) for s in steps]); self.cum = np.r_[0, np.cumsum(w)] / w.sum()
+        self.i = 0
+
+    def step(self, i, detail="", eta=None):
+        self.i = i
+        progress(self.name, self.idx, self.task, detail, self.cum[i], steps=self.labels, step=i, nxt=self.cum[i + 1], eta=eta)
+
+    def sub(self, rel, detail="", rel_next=None, eta=None):
+        a, b = self.cum[self.i], self.cum[self.i + 1]
+        progress(self.name, self.idx, self.task, detail, a + (b - a) * rel, step=self.i,
+                 nxt=None if rel_next is None else a + (b - a) * rel_next, eta=eta)
+
+    def note(self, text):
+        e = PROGRESS.get(f"{self.name}|{self.idx}", {}).get(self.task)
+        if e is not None:
+            e["notes"][str(self.i)] = text
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        progress(self.name, self.idx, self.task, done=True)
 
 
 class Log:
@@ -374,8 +422,50 @@ class Log:
         import sim
         key = (prop, blades)
         if getattr(self, "_sim", (None, None))[0] != key:
-            self._sim = (key, sim.model_report(self, self.profile(prop, blades)))
+            r = self._sim_disk(key)
+            if r is None:
+                r = sim.model_report(self, self.profile(prop, blades))
+                self._sim_save(key, r)
+            self._sim = (key, r)
         return {**self._sim[1], "typical": sim.typical_report(self, self._sim[1], self.profile(prop, blades, auw))}
+
+    # the learned model is the slow part (seconds): kept next to the log, valid while the log and the model code are unchanged
+    def _sim_file(self):
+        return self.path.with_suffix(f".{self.idx}.sim.json")
+
+    def sim_cached(self, prop=None, blades=None):
+        return getattr(self, "_sim", (None, None))[0] == (prop, blades) or self._sim_disk((prop, blades)) is not None
+
+    def _sim_disk(self, key):
+        import sim
+        p = self._sim_file()
+        try:
+            if not p.exists() or p.stat().st_mtime < self.path.stat().st_mtime:
+                return None
+            d = json.loads(p.read_text())
+            if d.get("code") != sim.code_id():
+                return None
+            return (d.get("entries") or {}).get(f"{key[0]}|{key[1]}")
+        except (OSError, ValueError):
+            return None
+
+    def _sim_save(self, key, r):
+        import sim
+        p = self._sim_file()
+        try:
+            d = json.loads(p.read_text()) if p.exists() else {}
+            if d.get("code") != sim.code_id():
+                d = {}
+        except (OSError, ValueError):
+            d = {}
+        d["code"] = sim.code_id()
+        d.setdefault("entries", {})[f"{key[0]}|{key[1]}"] = r
+        tmp = p.with_suffix(f".tmp{threading.get_ident()}.json")
+        try:
+            tmp.write_text(json.dumps(d, default=lambda o: o.item() if hasattr(o, "item") else str(o)))
+            tmp.replace(p)
+        except OSError:
+            tmp.unlink(missing_ok=True)
 
     def filterplan(self, t0=None, t1=None, prop=None, blades=None, **kw):
         from tuning import filter_plan

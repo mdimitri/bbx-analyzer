@@ -45,13 +45,16 @@ def notch(f, fs, fc, q, weight=1.0):
 
 
 def rpm_notch(h, f_hz, weight=1.0):
-    """Betaflight RPM-filter notch at f_hz: below rpm_filter_min_hz + rpm_filter_fade_range_hz its weight fades linearly
-    to 0 at rpm_filter_min_hz, and its frequency is held at rpm_filter_min_hz (rpm_filter.c). Returns (centre, weight)."""
+    """Betaflight RPM-filter notch at f_hz (rpm_filter.c, rpmFilterUpdate): the centre is held between rpm_filter_min_hz
+    and 0.48 × the PID loop rate, and within rpm_filter_fade_range_hz above the minimum the weight fades linearly to 0
+    (marginHz / fadeRangeHz). Returns (centre, weight)."""
     mn = hnum(h, "rpm_filter_min_hz", 100)[0]
     fr = hnum(h, "rpm_filter_fade_range_hz", 50)[0]
-    if fr > 0 and f_hz < mn + fr:
+    fs_pid = 1e6 / max(hnum(h, "looptime", 125)[0], 1) / max(hnum(h, "pid_process_denom", 1)[0], 1)
+    f_hz = min(max(f_hz, mn), 0.48 * fs_pid)          # constrainf(…, minHz, maxHz = 0.48 · PID loop rate)
+    if fr > 0 and f_hz - mn < fr:
         weight *= float(np.clip((f_hz - mn) / fr, 0.0, 1.0))
-    return max(f_hz, mn), weight
+    return f_hz, weight
 
 
 def notch_q(center, cutoff):  # BF filterGetNotchQ
@@ -334,7 +337,7 @@ def noise_report(lg, t0=None, t1=None, res_prom=6.0, res_persist=40.0, res_mask=
     motors = [c[f"motorHz[{i}]"][sl] for i in range(8) if f"motorHz[{i}]" in c]
     out = {"axes": {}, "findings": []}
     F = out["findings"]
-    rms_hf, rms_lf, d_hf, d_lf, resid_peaks, harm_all = [], [], [], [], [], []
+    rms_hf, rms_lf, d_hf, d_lf, resid_peaks, harm_all, resid_specs = [], [], [], [], [], [], []
     f = None
     for ax in range(3):
         a = {}
@@ -359,6 +362,7 @@ def noise_report(lg, t0=None, t1=None, res_prom=6.0, res_persist=40.0, res_mask=
                                           nh=max(int(hnum(h, "rpm_filter_harmonics", 3)[0]), 3))
             harm_all.append(harm)
             resid_peaks += [(fq, pr_, ax) for fq, pr_ in find_peaks(fr, res, prom=5.5, fmin=50)[:3]]
+            resid_specs.append(res)
         out["axes"][str(ax)] = a
     out["f"] = f.round(2).tolist()
 
@@ -374,6 +378,25 @@ def noise_report(lg, t0=None, t1=None, res_prom=6.0, res_persist=40.0, res_mask=
             dyn_est.append(p[0])
     st = filter_model(h, f, thr_mean, mot_med, dyn_est)
     out["dyn_est"] = [round(float(x), 1) for x in dyn_est]
+    cand_all = []          # every distinct residual peak (after the RPM filter), strongest first: where a notch tracker would sit
+    for p in sorted(resid_peaks, key=lambda p: -p[1]):
+        if all(abs(p[0] - q) > 20 for q, _ in cand_all):
+            cand_all.append((round(float(p[0]), 1), round(float(p[1]), 1)))
+    out["dyn_cand"] = cand_all
+    # the highest points of the residual spectrum (no prominence needed): where a notch tracker with spare notches ends up
+    if resid_specs:
+        fr_ = fr
+        lvl = 10 * np.log10(np.nanmean([10 ** (r / 10) for r in resid_specs], axis=0))
+        mx = [i for i in range(1, len(lvl) - 1) if np.isfinite(lvl[i]) and fr_[i] >= 50 and lvl[i] >= np.nan_to_num(lvl[i - 1], nan=-1e9)
+              and lvl[i] >= np.nan_to_num(lvl[i + 1], nan=-1e9)]
+        tops = []
+        for i in sorted(mx, key=lambda i: -lvl[i]):
+            if all(abs(fr_[i] - q) > 20 for q, _ in tops):
+                tops.append((round(float(fr_[i]), 1), round(float(lvl[i]), 1)))
+            if len(tops) >= 8:
+                break
+        out["dyn_tops"] = tops
+        out["spec_fmax"] = round(float(fr_[-1]), 1)
     out["filters"] = {k: dict(label=s["label"], chain=s["chain"], db=(20 * np.log10(np.abs(s["H"]) + 1e-9)).clip(-60, 6).round(2).tolist())
                       for k, s in st.items()}
     bands = []

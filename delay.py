@@ -56,55 +56,217 @@ def dyn_centres(lg, noise=None):
 
 
 # ---------------------------------------------------------------- filter stages
+LPF_ORDER = {0: 1, 1: 2, 2: 2, 3: 3}
+TYPE_NAME = {0: "PT1", 1: "BIQUAD", 2: "PT2", 3: "PT3"}
+
+
+def _lpf_spec(h, p, n, thr, rate_hz, rate_name, scale):
+    """Spec rows of a low-pass stage p ('gyro' | 'dterm'), n (1 | 2). Returns (type, cutoff now, rows, dyn (lo, hi, expo) or None)."""
+    t = int(hnum(h, f"{p}_lpf{n}_type")[0])
+    dyn = None
+    if n == 1:
+        lo, hi = (hnum(h, f"{p}_lpf1_dyn_hz", 0) + [0])[:2]
+        if lo > 0:
+            ex = hnum(h, f"{p}_lpf1_dyn_expo" if p == "dterm" else "gyro_lpf1_dyn_expo", 5)[0]
+            dyn = (lo * scale, hi * scale, ex)
+    fc = dyn_cutoff(thr, *dyn) if dyn else hnum(h, f"{p}_lpf{n}_static_hz")[0] * scale
+    rows = [["Type", TYPE_NAME.get(t, "?"), f"{p}_lpf{n}_type"]]
+    if dyn:
+        rows += [["Cutoff range", f"{dyn[0]:.0f}–{dyn[1]:.0f} Hz (dynamic, follows throttle)", f"{p}_lpf1_dyn_min_hz, {p}_lpf1_dyn_max_hz"],
+                 ["Curve expo", f"{dyn[2]:.0f}", f"{p}_lpf1_dyn_expo" if p == "dterm" else "gyro_lpf1_dyn_expo"],
+                 ["Cutoff at hover", f"{fc:.0f} Hz at {thr * 100:.0f}% throttle", None]]
+    else:
+        rows += [["Cutoff", f"{fc:.0f} Hz (static)", f"{p}_lpf{n}_static_hz"]]
+    rows += [["Runs at", f"{rate_hz:.0f} Hz ({rate_name})", None]]
+    return t, fc, rows, dyn
+
+
 def stages(h, thr, motor_hz, dyn, scale_g=1.0, scale_d=1.0):
-    """Every filter stage as (key, label, chain, H(f)); chain: 'gyro' (P, I and D see it), 'dterm' (D only),
-    'yawp' (yaw P only). scale_g / scale_d multiply the gyro / D-term low-pass cutoffs (what-if)."""
+    """Every filter stage: key, label, chain ('gyro': P, I and D see it; 'dterm': D only; 'yawp': yaw P only), H(f),
+    and for the explanations: kind, its numbers (spec rows with the CLI names) and its parts (each notch / harmonic).
+    scale_g / scale_d multiply the gyro / D-term low-pass cutoffs (what-if)."""
     fs_g, fs_p = rates(h)
     S = []
 
-    def add(key, label, chain, fn):
-        S.append(dict(key=key, label=label, chain=chain, H=fn))
-    t1 = int(hnum(h, "gyro_lpf1_type")[0]); lo, hi = (hnum(h, "gyro_lpf1_dyn_hz", 0) + [0])[:2]
-    fc = dyn_cutoff(thr, lo, hi, hnum(h, "gyro_lpf1_dyn_expo", 5)[0]) if lo > 0 else hnum(h, "gyro_lpf1_static_hz")[0]
-    if fc > 0:
-        f1 = fc * scale_g
-        add("gyro_lpf1", f"Gyro LPF1 {LPF_TYPES.get(t1, '?')} {f1:.0f} Hz" + (" (dynamic)" if lo > 0 else ""), "gyro", lambda f, f1=f1: lpf(f, fs_p, f1, t1))
-    fc = hnum(h, "gyro_lpf2_static_hz")[0]
-    if fc > 0:
-        t2 = int(hnum(h, "gyro_lpf2_type")[0]); f2 = fc * scale_g
-        add("gyro_lpf2", f"Gyro LPF2 {LPF_TYPES.get(t2, '?')} {f2:.0f} Hz", "gyro", lambda f, f2=f2: lpf(f, fs_g, f2, t2))
-    ns = [(c, co) for c, co in zip(hnum(h, "gyro_notch_hz"), hnum(h, "gyro_notch_cutoff")) if c > 0 and 0 < co < c]
-    if ns:
-        add("gyro_notch", "Static notch" + ("es " if len(ns) > 1 else " ") + ", ".join(f"{c:.0f}" for c, _ in ns) + " Hz", "gyro",
-            lambda f: np.prod([notch(f, fs_p, c, notch_q(c, co)) for c, co in ns], axis=0))
-    nh = int(hnum(h, "rpm_filter_harmonics")[0])
-    if nh and motor_hz and hnum(h, "dshot_bidir")[0]:
-        q = hnum(h, "rpm_filter_q", 500)[0] / 100
-        w = (hnum(h, "rpm_filter_weights", 100) * 3)[:nh]
-        lst = [(fk, wk) for m in motor_hz for k in range(1, nh + 1) for fk, wk in [rpm_notch(h, m * k, w[k - 1] / 100)] if wk > 0]
-        if lst:
-            add("rpm", f"RPM filter ({nh} harmonics × {len(motor_hz)} motors)", "gyro",
-                lambda f: np.prod([notch(f, fs_p, fk, q, wk) for fk, wk in lst], axis=0))
-    if dyn:
-        q = hnum(h, "dyn_notch_q", 300)[0] / 100
-        add("dyn_notch", f"Dynamic notch{'es' if len(dyn) > 1 else ''} " + ", ".join(f"{c:.0f}" for c in dyn) + " Hz", "gyro",
-            lambda f: np.prod([notch(f, fs_p, c, q) for c in dyn], axis=0))
-    t = int(hnum(h, "dterm_lpf1_type")[0]); lo, hi = (hnum(h, "dterm_lpf1_dyn_hz", 0) + [0])[:2]
-    fc = dyn_cutoff(thr, lo, hi, hnum(h, "dterm_lpf1_dyn_expo", 5)[0]) if lo > 0 else hnum(h, "dterm_lpf1_static_hz")[0]
-    if fc > 0:
-        f1 = fc * scale_d
-        add("dterm_lpf1", f"D-term LPF1 {LPF_TYPES.get(t, '?')} {f1:.0f} Hz" + (" (dynamic)" if lo > 0 else ""), "dterm", lambda f, f1=f1: lpf(f, fs_p, f1, t))
-    fc = hnum(h, "dterm_lpf2_static_hz")[0]
-    if fc > 0:
-        t2 = int(hnum(h, "dterm_lpf2_type")[0]); f2 = fc * scale_d
-        add("dterm_lpf2", f"D-term LPF2 {LPF_TYPES.get(t2, '?')} {f2:.0f} Hz", "dterm", lambda f, f2=f2: lpf(f, fs_p, f2, t2))
+    def add(key, label, chain, fn, kind, spec, rows, parts=None):
+        S.append(dict(key=key, label=label, chain=chain, H=fn, kind=kind, spec=spec, rows=rows, parts=parts or []))
+    for p, sc, chain in (("gyro", scale_g, "gyro"), ("dterm", scale_d, "dterm")):
+        for n in (1, 2):
+            fsr, rn = (fs_g, "gyro sample rate, it is the downsampling filter") if (p, n) == ("gyro", 2) else (fs_p, "PID loop rate")
+            t, fc, rows, dy = _lpf_spec(h, p, n, thr, fsr, rn, sc)
+            if fc > 0:
+                nm = ("Gyro" if p == "gyro" else "D-term") + f" LPF{n}"
+                add(f"{p}_lpf{n}", f"{nm} {TYPE_NAME.get(t, '?')} {fc:.0f} Hz" + (" (dynamic)" if dy else ""), chain,
+                    lambda f, fc=fc, t=t, fsr=fsr: lpf(f, fsr, fc, t), "lpf", dict(type=t, fc=fc, dyn=dy, fs=fsr, p=p, n=n), rows)
+        if p == "gyro":
+            ns = [(c, co) for c, co in zip(hnum(h, "gyro_notch_hz"), hnum(h, "gyro_notch_cutoff")) if c > 0 and 0 < co < c]
+            if ns:
+                qs = [notch_q(c, co) for c, co in ns]
+                rows = [[f"Notch {i + 1}", f"centre {c:.0f} Hz, cutoff {co:.0f} Hz → Q {q:.2f}", f"gyro_notch{i + 1}_hz, gyro_notch{i + 1}_cutoff"] for i, ((c, co), q) in enumerate(zip(ns, qs))]
+                rows.append(["Runs at", f"{fs_p:.0f} Hz (PID loop rate)", None])
+                add("gyro_notch", "Static notch" + ("es " if len(ns) > 1 else " ") + ", ".join(f"{c:.0f}" for c, _ in ns) + " Hz", "gyro",
+                    lambda f, ns=ns: np.prod([notch(f, fs_p, c, notch_q(c, co)) for c, co in ns], axis=0), "notch",
+                    dict(notches=[(c, q, 1.0) for (c, _), q in zip(ns, qs)]), rows,
+                    [(f"{c:.0f} Hz notch (Q {q:.2f})", lambda f, c=c, q=q: notch(f, fs_p, c, q)) for (c, _), q in zip(ns, qs)])
+            nh = int(hnum(h, "rpm_filter_harmonics")[0])
+            if nh and motor_hz and hnum(h, "dshot_bidir")[0]:
+                q = hnum(h, "rpm_filter_q", 500)[0] / 100
+                w = (hnum(h, "rpm_filter_weights", 100) * 3)[:nh]
+                mn, fr = hnum(h, "rpm_filter_min_hz", 100)[0], hnum(h, "rpm_filter_fade_range_hz", 50)[0]
+                lst = [(k, fk, wk) for m in motor_hz for k in range(1, nh + 1) for fk, wk in [rpm_notch(h, m * k, w[k - 1] / 100)] if wk > 0]
+                if lst:
+                    per = {k: [(fk, wk) for kk, fk, wk in lst if kk == k] for k in range(1, nh + 1)}
+                    rows = [["Notches", f"{nh} harmonics × {len(motor_hz)} motors = {len(lst)} active", "rpm_filter_harmonics"],
+                            ["Q", f"{q:.2f} (every notch)", "rpm_filter_q"],
+                            ["Weights", ", ".join(f"{x:.0f}%" for x in w), "rpm_filter_weights"],
+                            ["Min / fade", f"{mn:.0f} Hz, fades in over {fr:.0f} Hz above it", "rpm_filter_min_hz, rpm_filter_fade_range_hz"]]
+                    for k, v in per.items():
+                        if v:
+                            rows.append([f"Harmonic {k}", ", ".join(f"{fk:.0f}" for fk, _ in v) + " Hz" + ("" if all(abs(wk - w[k - 1] / 100) < 1e-6 for _, wk in v)
+                                                                                                         else " · faded to " + ", ".join(f"{wk * 100:.0f}%" for _, wk in v)), None])
+                    rows.append(["Centres from", "median motor speed in the air (eRPM telemetry)", None])
+                    rows.append(["Runs at", f"{fs_p:.0f} Hz (PID loop rate)", None])
+                    add("rpm", f"RPM filter ({nh} harmonics × {len(motor_hz)} motors)", "gyro",
+                        lambda f, lst=lst, q=q: np.prod([notch(f, fs_p, fk, q, wk) for _, fk, wk in lst], axis=0), "rpm",
+                        dict(notches=[(fk, q, wk) for _, fk, wk in lst], q=q, nh=nh), rows,
+                        [(f"harmonic {k} ({len(v)} notches, {min(x for x, _ in v):.0f}–{max(x for x, _ in v):.0f} Hz)",
+                          lambda f, v=v: np.prod([notch(f, fs_p, fk, q, wk) for fk, wk in v], axis=0)) for k, v in per.items() if v])
+            if dyn:
+                q = hnum(h, "dyn_notch_q", 300)[0] / 100
+                rows = [["Count", f"{len(dyn)}", "dyn_notch_count"], ["Q", f"{q:.2f}", "dyn_notch_q"],
+                        ["Range", f"{hnum(h, 'dyn_notch_min_hz', 100)[0]:.0f}–{hnum(h, 'dyn_notch_max_hz', 600)[0]:.0f} Hz", "dyn_notch_min_hz, dyn_notch_max_hz"],
+                        ["Centres", ", ".join(f"{c:.0f}" for c in dyn) + " Hz", None], ["Runs at", f"{fs_p:.0f} Hz (PID loop rate)", None]]
+                add("dyn_notch", f"Dynamic notch{'es' if len(dyn) > 1 else ''} " + ", ".join(f"{c:.0f}" for c in dyn) + " Hz", "gyro",
+                    lambda f, dyn=tuple(dyn), q=q: np.prod([notch(f, fs_p, c, q) for c in dyn], axis=0), "notch",
+                    dict(notches=[(c, q, 1.0) for c in dyn]), rows, [(f"{c:.0f} Hz notch", lambda f, c=c: notch(f, fs_p, c, q)) for c in dyn])
     c, co = hnum(h, "dterm_notch_hz")[0], hnum(h, "dterm_notch_cutoff")[0]
     if c > 0 and 0 < co < c:
-        add("dterm_notch", f"D-term notch {c:.0f} Hz", "dterm", lambda f: notch(f, fs_p, c, notch_q(c, co)))
+        q = notch_q(c, co)
+        add("dterm_notch", f"D-term notch {c:.0f} Hz", "dterm", lambda f: notch(f, fs_p, c, q), "notch", dict(notches=[(c, q, 1.0)]),
+            [["Centre / cutoff", f"{c:.0f} / {co:.0f} Hz → Q {q:.2f}", "dterm_notch_hz, dterm_notch_cutoff"], ["Runs at", f"{fs_p:.0f} Hz (PID loop rate)", None]])
     yl = hnum(h, "yaw_lowpass_hz", 0)[0]
     if yl > 0:
-        add("yaw_lpf", f"Yaw P low-pass {yl:.0f} Hz", "yawp", lambda f: lpf(f, fs_p, yl, 0))
+        add("yaw_lpf", f"Yaw P low-pass {yl:.0f} Hz", "yawp", lambda f: lpf(f, fs_p, yl, 0), "lpf", dict(type=0, fc=yl, dyn=None, fs=fs_p, p="yaw", n=0),
+            [["Type", "PT1 (on the yaw P term only)", None], ["Cutoff", f"{yl:.0f} Hz", "yaw_lowpass_hz"], ["Runs at", f"{fs_p:.0f} Hz (PID loop rate)", None]])
+    order = {"gyro_lpf1": 0, "gyro_lpf2": 1, "gyro_notch": 2, "rpm": 3, "dyn_notch": 4, "dterm_lpf1": 5, "dterm_lpf2": 6, "dterm_notch": 7, "yaw_lpf": 8}
+    S.sort(key=lambda x: order[x["key"]])
     return S
+
+
+def explain(st, fc, ms, thr_ms=None):
+    """Why this stage delays as much as it does: the closed-form rule next to the exact value at the crossover."""
+    sp = st["spec"]
+    if st["kind"] == "lpf":
+        t, f0 = sp["type"], sp["fc"]
+        if t == 1:
+            rule, approx = f"a 2nd-order Butterworth (biquad, Q 0.707) delays everything well below its cutoff by about √2 / (2π · cutoff)", np.sqrt(2) / (2 * np.pi * f0)
+        else:
+            n = LPF_ORDER[t]; corr = {1: 1.0, 2: 1.553774, 3: 1.961459}[n]
+            if n == 1:
+                rule, approx = "a PT1 low-pass delays everything well below its cutoff by about 1 / (2π · cutoff)", 1 / (2 * np.pi * f0)
+            else:
+                rule = (f"a PT{n} is {n} PT1 stages in a row, each at {corr:.3f} × the cutoff (so the whole filter is −3 dB at the cutoff): "
+                        f"delay ≈ {n} / (2π · {corr:.3f} · cutoff)")
+                approx = n / (2 * np.pi * corr * f0)
+        txt = (f"It smooths by averaging over time, so its output lags: {rule} = {approx * 1000:.2f} ms at {f0:.0f} Hz. "
+               f"Exactly at the {fc:.0f} Hz crossover: {ms:.2f} ms ({ms / 1000 * 360 * fc:.1f}° of phase). Delay scales with 1 / cutoff: "
+               f"20% lower cutoff → 25% more delay.")
+        if sp.get("dyn"):
+            lo, hi, ex = sp["dyn"]
+            txt += f" It is dynamic: the cutoff runs from {lo:.0f} Hz at idle to {hi:.0f} Hz at full throttle (expo {ex:.0f}), so it delays most at low throttle"
+            txt += (f" ({thr_ms[0]:.2f} ms at 15% throttle, {thr_ms[1]:.2f} ms at 80%)." if thr_ms else ".")
+        return txt
+    nts = sp["notches"]
+    each = [w / (q * 2 * np.pi * c) * 1000 for c, q, w in nts]
+    rule = ("A notch removes a narrow band around its centre, but it also shifts the phase of everything below it: "
+            "well below the centre it delays by about weight / (Q · 2π · centre).")
+    if st["kind"] == "rpm":
+        lowest = min(nts, key=lambda x: x[0])
+        faded = [x for x in nts if x[2] < 0.999]
+        fade_txt = (f" {len(faded)} of them are faded to {', '.join(f'{x[2] * 100:.0f}%' for x in faded)} because the motors run within "
+                    f"rpm_filter_fade_range_hz of rpm_filter_min_hz: a faded notch delays less, but it also removes less of that motor line."
+                    if faded else "")
+        txt = (f"{rule} {len(nts)} notches at Q {sp['q']:.2f}: the lowest ones (1st harmonic, ≈{lowest[0]:.0f} Hz) cost most, "
+               f"≈{lowest[2] / (lowest[1] * 2 * np.pi * lowest[0]) * 1000:.3f} ms each; the sum of the rule over all notches is {sum(each):.2f} ms. "
+               f"Exactly at {fc:.0f} Hz: {ms:.2f} ms. More notches, lower Q or lower motor speed (centres nearer the control band) → more delay.{fade_txt}")
+        return txt
+    if len(nts) == 1:
+        c, q, w = nts[0]
+        return f"{rule} Centre {c:.0f} Hz, Q {q:.2f}: ≈{each[0]:.3f} ms; exactly at {fc:.0f} Hz: {ms:.3f} ms. Halving Q (wider notch) doubles it; a notch nearer the control band costs more."
+    return (f"{rule} {len(nts)} notches (" + ", ".join(f"{c:.0f} Hz Q {q:.2f}" for c, q, _ in nts) + f"): ≈{sum(each):.3f} ms by the rule, "
+            f"{ms:.3f} ms exactly at {fc:.0f} Hz. Each extra notch adds its own share; a wider notch (lower Q) or one nearer the control band costs more.")
+
+
+def _mul_pair(v, m):
+    return ",".join(f"{x * m:.0f}" for x in v)
+
+
+def whatifs(h, key, dyn, cand=()):
+    """Header changes worth trying for one stage: list of (label, header updates, new dyn centres or None, CLI text)."""
+    W = []
+    if key in ("gyro_lpf1", "dterm_lpf1"):
+        p = key.split("_")[0]
+        lo, hi = (hnum(h, f"{p}_lpf1_dyn_hz", 0) + [0])[:2]
+        st = hnum(h, f"{p}_lpf1_static_hz", 0)[0]
+        t = int(hnum(h, f"{p}_lpf1_type")[0])
+        for m, nm in ((0.8, "cutoff −20%"), (1.25, "cutoff +25%"), (1.5, "cutoff +50%")):
+            if lo > 0:
+                W.append((nm, {f"{p}_lpf1_dyn_hz": _mul_pair([lo, hi], m)}, None, f"set {p}_lpf1_dyn_min_hz = {lo * m:.0f}\nset {p}_lpf1_dyn_max_hz = {hi * m:.0f}"))
+            else:
+                W.append((nm, {f"{p}_lpf1_static_hz": st * m}, None, f"set {p}_lpf1_static_hz = {st * m:.0f}"))
+        alt = 2 if t == 0 else 0
+        W.append((f"type {TYPE_NAME[alt]}, same cutoff", {f"{p}_lpf1_type": alt}, None, f"set {p}_lpf1_type = {TYPE_NAME[alt]}"))
+        W.append(("off", {f"{p}_lpf1_dyn_hz": "0,0", f"{p}_lpf1_static_hz": 0}, None, f"set {p}_lpf1_dyn_min_hz = 0\nset {p}_lpf1_static_hz = 0"))
+    elif key in ("gyro_lpf2", "dterm_lpf2"):
+        p = key.split("_")[0]
+        st = hnum(h, f"{p}_lpf2_static_hz", 0)[0]; t = int(hnum(h, f"{p}_lpf2_type")[0]); alt = 2 if t == 0 else 0
+        for m, nm in ((0.8, "cutoff −20%"), (1.25, "cutoff +25%")):
+            W.append((nm, {f"{p}_lpf2_static_hz": st * m}, None, f"set {p}_lpf2_static_hz = {st * m:.0f}"))
+        W.append((f"type {TYPE_NAME[alt]}, same cutoff", {f"{p}_lpf2_type": alt}, None, f"set {p}_lpf2_type = {TYPE_NAME[alt]}"))
+        W.append(("off", {f"{p}_lpf2_static_hz": 0}, None, f"set {p}_lpf2_static_hz = 0"))
+    elif key == "gyro_notch":
+        cs, cos = hnum(h, "gyro_notch_hz"), hnum(h, "gyro_notch_cutoff")
+        for m, nm in ((2.0, "half as wide (Q × 2)"), (0.5, "twice as wide (Q ÷ 2)")):
+            nc = [tuning_notch_cutoff(c, notch_q(c, co) * m) if c > 0 and 0 < co < c else co for c, co in zip(cs, cos)]
+            W.append((nm, {"gyro_notch_cutoff": ",".join(f"{x:.0f}" for x in nc)}, None,
+                      "\n".join(f"set gyro_notch{i + 1}_cutoff = {x:.0f}" for i, x in enumerate(nc) if cs[i] > 0)))
+        W.append(("off", {"gyro_notch_hz": "0,0"}, None, "set gyro_notch1_hz = 0\nset gyro_notch2_hz = 0"))
+    elif key == "rpm":
+        q = hnum(h, "rpm_filter_q", 500)[0]; nh = int(hnum(h, "rpm_filter_harmonics")[0])
+        w = (hnum(h, "rpm_filter_weights", 100) * 3)[:3]
+        W.append((f"Q {q * 1.4 / 100:.1f} (narrower)", {"rpm_filter_q": q * 1.4}, None, f"set rpm_filter_q = {q * 1.4:.0f}"))
+        W.append((f"Q {q * 0.7 / 100:.1f} (wider)", {"rpm_filter_q": q * 0.7}, None, f"set rpm_filter_q = {q * 0.7:.0f}"))
+        if nh >= 3 and w[2] > 0:
+            W.append(("3rd harmonic off", {"rpm_filter_weights": f"{w[0]:.0f},{w[1]:.0f},0"}, None, f"set rpm_filter_weights = {w[0]:.0f},{w[1]:.0f},0"))
+        elif nh >= 2:
+            W.append((f"{nh - 1} harmonics", {"rpm_filter_harmonics": nh - 1}, None, f"set rpm_filter_harmonics = {nh - 1}"))
+        mn = hnum(h, "rpm_filter_min_hz", 100)[0]
+        if mn != 100:
+            W.append(("min 100 Hz (default)", {"rpm_filter_min_hz": 100}, None, "set rpm_filter_min_hz = 100"))
+        W.append(("off", {"rpm_filter_harmonics": 0}, None, "set rpm_filter_harmonics = 0"))
+    elif key == "dyn_notch":
+        q = hnum(h, "dyn_notch_q", 300)[0]; n = len(dyn)
+        W.append((f"Q {q * 1.5 / 100:.1f} (narrower)", {"dyn_notch_q": q * 1.5}, None, f"set dyn_notch_q = {q * 1.5:.0f}"))
+        W.append((f"Q {q / 1.5 / 100:.1f} (wider)", {"dyn_notch_q": q / 1.5}, None, f"set dyn_notch_q = {q / 1.5:.0f}"))
+        if n > 1:
+            W.append((f"{n - 1} notch{'es' if n > 2 else ''}", {"dyn_notch_count": n - 1}, list(dyn[:-1]), f"set dyn_notch_count = {n - 1}"))
+        if n < 5:
+            extra = next((c for c in cand if all(abs(c - d) > 20 for d in dyn)), hnum(h, "dyn_notch_min_hz", 100)[0])
+            W.append((f"{n + 1} notches", {"dyn_notch_count": n + 1}, list(dyn) + [extra], f"set dyn_notch_count = {n + 1}"))
+        W.append(("off", {"dyn_notch_count": 0}, [], "set dyn_notch_count = 0"))
+    elif key == "dterm_notch":
+        W.append(("off", {"dterm_notch_hz": 0}, None, "set dterm_notch_hz = 0"))
+    elif key == "yaw_lpf":
+        yl = hnum(h, "yaw_lowpass_hz", 0)[0]
+        W.append(("cutoff × 0.5", {"yaw_lowpass_hz": yl * 0.5}, None, f"set yaw_lowpass_hz = {yl * 0.5:.0f}"))
+        W.append(("cutoff × 2", {"yaw_lowpass_hz": yl * 2}, None, f"set yaw_lowpass_hz = {yl * 2:.0f}"))
+        W.append(("off", {"yaw_lowpass_hz": 0}, None, "set yaw_lowpass_hz = 0"))
+    return W
+
+
+def tuning_notch_cutoff(fc, q):
+    from tuning import notch_cutoff
+    return float(notch_cutoff(fc, q))
 
 
 def phase_delay_ms(H, f):
@@ -135,7 +297,6 @@ def loop(h, S, pl, g, ax, f, kp_mul=1.0, kd_mul=1.0, p_scale=1.0):
     z1 = np.exp(-2j * np.pi * f * T)
     s = 2j * np.pi * f
     Gg = chain(S, f, ("gyro",))
-    Gd = Gg * chain(S, f, ("dterm",))
     Yp = chain(S, f, ("yawp",)) if ax == 2 else 1.0
     kp = KP * g["P"] * kp_mul * p_scale
     ki = KI * g["I"]
@@ -170,48 +331,115 @@ def margins(L, f):
     return out
 
 
-# ---------------------------------------------------------------- typical filters for the size
-def typical_headers(h, inch, rpm_on):
-    """Betaflight defaults with the LPF1 cutoffs scaled for the prop size (quad.size_params), everything else the
-    firmware default; the user's notch hardware-specific choices are replaced by the defaults too."""
-    import quad
-    t = quad.size_params(inch)["typical"]
+# ---------------------------------------------------------------- the reference setup
+# Betaflight firmware defaults (checked against the source, master / 2025.x, unchanged since 4.3):
+#   sensors/gyro.h   GYRO_LPF1_DYN_MIN_HZ_DEFAULT 250, GYRO_LPF1_DYN_MAX_HZ_DEFAULT 500, GYRO_LPF2_HZ_DEFAULT 500
+#   sensors/gyro.c   gyro_lpf1_type = gyro_lpf2_type = PT1, gyro_lpf1_dyn_expo 5, gyro notches 0 (off)
+#   flight/pid.h     DTERM_LPF1_DYN_MIN_HZ_DEFAULT 75, DTERM_LPF1_DYN_MAX_HZ_DEFAULT 150, DTERM_LPF2_HZ_DEFAULT 150
+#   flight/pid.c     dterm_lpf1_type = dterm_lpf2_type = PT1, dterm_lpf1_dyn_expo 5, dterm_notch_hz 0, yaw_lowpass_hz 100
+#   pg/dyn_notch.c   dyn_notch_count 3, dyn_notch_q 300, dyn_notch_min_hz 100, dyn_notch_max_hz 600
+#   pg/rpm_filter.c  rpm_filter_harmonics 3, rpm_filter_weights 100,100,100, rpm_filter_min_hz 100, rpm_filter_fade_range_hz 50, rpm_filter_q 500
+BF_DEFAULTS = {"gyro_lpf1_type": 0, "gyro_lpf1_dyn_hz": "250,500", "gyro_lpf1_dyn_expo": 5, "gyro_lpf1_static_hz": 250,
+               "gyro_lpf2_type": 0, "gyro_lpf2_static_hz": 500, "gyro_notch_hz": "0,0", "gyro_notch_cutoff": "0,0",
+               "dterm_lpf1_type": 0, "dterm_lpf1_dyn_hz": "75,150", "dterm_lpf1_dyn_expo": 5, "dterm_lpf1_static_hz": 75,
+               "dterm_lpf2_type": 0, "dterm_lpf2_static_hz": 150, "dterm_notch_hz": 0, "dterm_notch_cutoff": 0, "yaw_lowpass_hz": 100,
+               "dyn_notch_count": 3, "dyn_notch_q": 300, "dyn_notch_min_hz": 100, "dyn_notch_max_hz": 600,
+               "rpm_filter_harmonics": 3, "rpm_filter_weights": "100,100,100", "rpm_filter_min_hz": 100, "rpm_filter_fade_range_hz": 50, "rpm_filter_q": 500}
+BF_SRC = {"gyro_lpf1": "sensors/gyro.h: GYRO_LPF1_DYN_MIN/MAX_HZ_DEFAULT 250/500, PT1, expo 5",
+          "gyro_lpf2": "sensors/gyro.h: GYRO_LPF2_HZ_DEFAULT 500, PT1",
+          "dterm_lpf1": "flight/pid.h: DTERM_LPF1_DYN_MIN/MAX_HZ_DEFAULT 75/150, PT1, expo 5",
+          "dterm_lpf2": "flight/pid.h: DTERM_LPF2_HZ_DEFAULT 150, PT1",
+          "dyn_notch": "pg/dyn_notch.c: count 3, Q 300 (3.0), 100–600 Hz",
+          "rpm": "pg/rpm_filter.c: 3 harmonics, Q 500 (5.0), weights 100/100/100, min 100 Hz, fade 50 Hz",
+          "yaw_lpf": "flight/pid.c: yaw_lowpass_hz 100",
+          "gyro_notch": "off by default", "dterm_notch": "off by default"}
+REFS = {"bf": "Betaflight defaults", "size": "Betaflight defaults scaled for the size"}
+
+
+def typical_headers(h, inch, rpm_on, ref="bf"):
+    """The reference setup on this quad's hardware (loop rates, bidirectional DShot): Betaflight's firmware defaults
+    (ref 'bf'), or those defaults with the low-pass cutoffs and the notch minimums scaled for the prop size (ref 'size',
+    quad.size_params: × (5 / inch)^0.8 for the low-passes, the same reference the Noise tab uses). Returns (headers, notes)
+    where notes says where each stage's numbers come from."""
     H = dict(h)
-    H.update({"gyro_lpf1_type": 0, "gyro_lpf1_dyn_hz": t["gyro_lpf1_dyn_hz"], "gyro_lpf1_dyn_expo": 5, "gyro_lpf1_static_hz": 0,
-              "gyro_lpf2_type": 0, "gyro_lpf2_static_hz": 500, "gyro_notch_hz": "0,0", "gyro_notch_cutoff": "0,0",
-              "dterm_lpf1_type": 0, "dterm_lpf1_dyn_hz": t["dterm_lpf1_dyn_hz"], "dterm_lpf1_dyn_expo": 5, "dterm_lpf1_static_hz": 0,
-              "dterm_lpf2_type": 0, "dterm_lpf2_static_hz": 150, "dterm_notch_hz": 0, "dterm_notch_cutoff": 0,
-              "dyn_notch_count": 1 if rpm_on else 3, "dyn_notch_q": 500 if rpm_on else 300, "dyn_notch_min_hz": t["dyn_notch_min_hz"],
-              "rpm_filter_harmonics": 3, "rpm_filter_q": 500, "rpm_filter_weights": "100,100,100", "rpm_filter_min_hz": t["rpm_filter_min_hz"],
-              "rpm_filter_fade_range_hz": 50, "yaw_lowpass_hz": hnum(h, "yaw_lowpass_hz", 100)[0]})
-    return H
+    H.update(BF_DEFAULTS)
+    src = dict(BF_SRC)
+    if ref == "size":
+        import quad
+        t = quad.size_params(inch)["typical"]
+        H.update({"gyro_lpf1_dyn_hz": t["gyro_lpf1_dyn_hz"], "dterm_lpf1_dyn_hz": t["dterm_lpf1_dyn_hz"],
+                  "dyn_notch_min_hz": t["dyn_notch_min_hz"], "rpm_filter_min_hz": t["rpm_filter_min_hz"]})
+        sc = f"scaled for {inch:g}″ from the 5″ default (× (5/{inch:g})^0.8)"
+        src["gyro_lpf1"] = f"{t['gyro_lpf1_dyn_hz'].replace(',', '–')} Hz: {sc}; type and expo: Betaflight default"
+        src["dterm_lpf1"] = f"{t['dterm_lpf1_dyn_hz'].replace(',', '–')} Hz: {sc}; type and expo: Betaflight default"
+        src["dyn_notch"] = f"count 3, Q 3.0: Betaflight default; min {t['dyn_notch_min_hz']} Hz scaled for {inch:g}″"
+        src["rpm"] = f"3 harmonics, Q 5.0, weights 100%: Betaflight default; min {t['rpm_filter_min_hz']} Hz scaled for {inch:g}″"
+    if not rpm_on:
+        H["rpm_filter_harmonics"] = 0     # needs bidirectional DShot, which this quad doesn't run
+    return H, src
+
+
+def typical_dyn(Ht, user_dyn, user_src, noise):
+    """Where the reference's dynamic notches would sit: the tracker locks onto the strongest residual peaks in its range,
+    so the same rule as for your own notches is used (logged centres first, then the peaks in your gyro spectrum, then
+    the range minimum). Returns (centres, description)."""
+    n = int(hnum(Ht, "dyn_notch_count", 0)[0])
+    lo, hi = hnum(Ht, "dyn_notch_min_hz", 100)[0], hnum(Ht, "dyn_notch_max_hz", 600)[0]
+    out, how = [], []
+    if user_src.startswith("logged"):
+        for c in user_dyn:
+            if lo <= c <= hi and len(out) < n:
+                out.append(c); how.append("logged")
+    for c, _ in (noise or {}).get("dyn_cand") or []:
+        if len(out) < n and lo <= c <= hi and all(abs(c - d) > 20 for d in out):
+            out.append(c); how.append("noise peak in your gyro")
+    for c, _ in (noise or {}).get("dyn_tops") or []:
+        if len(out) < n and lo <= c <= hi and all(abs(c - d) > 20 for d in out):
+            out.append(c); how.append("highest remaining point of your gyro spectrum")
+    while len(out) < n:
+        out.append(lo); how.append("nothing else in range: at the minimum (worst case)")
+    return out, ", ".join(f"{c:.0f} Hz ({w})" for c, w in zip(out, how))
 
 
 # ---------------------------------------------------------------- the analysis
+def _is_default(upd):
+    """True when every changed setting lands exactly on the firmware default."""
+    try:
+        return all(k in BF_DEFAULTS and [round(x) for x in hnum({k: v}, k)] == [round(x) for x in hnum(BF_DEFAULTS, k)] for k, v in upd.items())
+    except ValueError:
+        return False
+
+
 def _verdict_ratio(r, tiny):
     if tiny or r <= 1.15:
         return "good"
     return "warning" if r <= 1.5 else "serious"
 
 
-def analyse(lg, prof, M, noise, pw=None):
-    """lg: Log, prof: profile, M: simmodel report (learned plant), noise: noise report (raw spectra, dyn_est, budget)."""
+def analyse(lg, prof, M, noise, pw=None, ref="bf", prog=None):
+    """lg: Log, prof: profile, M: simmodel report (learned plant), noise: noise report (raw spectra, dyn_est, budget).
+    ref: reference setup ('bf' firmware defaults, 'size' defaults scaled for the prop size). prog(frac 0..1, detail)."""
+    prog = prog or (lambda fr, d: None)
+    ref = ref if ref in REFS else "bf"
     h, c = lg.headers, lg.cols
     fs_g, fs_p = rates(h)
     thr = c["throttle%"]; air = thr > 8
     hover_thr = float(np.median(thr[air]) / 100) if air.any() else 0.3
     motors = [c[f"motorHz[{i}]"] for i in range(8) if f"motorHz[{i}]" in c]
     mot_med = [float(np.median(m[air])) for m in motors] if motors and air.any() else None
-    rpm_on = bool(mot_med and hnum(h, "rpm_filter_harmonics")[0] and hnum(h, "dshot_bidir")[0])
+    rpm_hw = bool(mot_med and hnum(h, "dshot_bidir")[0])         # RPM filtering possible on this hardware (bidirectional DShot)
     dyn, dyn_src = dyn_centres(lg, noise)
+    cand = [x for x, _ in (noise or {}).get("dyn_cand") or []]
     inch = prof["used"]["inch"]
-    Ht = typical_headers(h, inch, rpm_on)
-    dyn_t = dyn[:int(hnum(Ht, "dyn_notch_count")[0])] if dyn else []
+    Ht, tsrc = typical_headers(h, inch, rpm_hw, ref)
+    dyn_t, dyn_t_src = typical_dyn(Ht, dyn, dyn_src, noise)
+    simp = {"gyro": hnum(h, "simplified_gyro_filter", 0)[0] >= 1, "dterm": hnum(h, "simplified_dterm_filter", 0)[0] >= 1}
     f = np.geomspace(0.5, fs_p * 0.45, 900)
     S = stages(h, hover_thr, mot_med, dyn)
     St = stages(Ht, hover_thr, mot_med, dyn_t)
     out = dict(fs_gyro=round(fs_g), fs_pid=round(fs_p), hover_thr=round(hover_thr * 100, 1), dyn=dict(centres=[round(x, 1) for x in dyn], source=dyn_src),
-               inch=inch, axes={}, stages=[dict(key=s["key"], label=s["label"], chain=s["chain"]) for s in S],
+               dyn_typ=dict(centres=[round(x, 1) for x in dyn_t], source=dyn_t_src), ref=ref, ref_label=REFS[ref], refs=REFS,
+               ref_src={k: v for k, v in tsrc.items()}, inch=inch, axes={}, stages=[dict(key=s["key"], label=s["label"], chain=s["chain"]) for s in S],
                typical_stages=[dict(key=s["key"], label=s["label"], chain=s["chain"]) for s in St])
     # phase delay vs frequency, per chain (for the curve chart)
     fd = np.geomspace(5, fs_p * 0.45, 240)
@@ -227,6 +455,7 @@ def analyse(lg, prof, M, noise, pw=None):
         pl = (M.get("axes") or {}).get(a)
         if not pl:
             continue
+        prog(ax / 3, f"{a}: crossover, margins and the delay of each of {len(S)} filter stages")
         g = M["pids"][a]
         km, kd = pl.get("kp_mul") or 1.0, pl.get("kd_mul") or 1.0
         L, C0 = loop(h, S, pl, g, ax, f, km, kd)
@@ -238,29 +467,66 @@ def analyse(lg, prof, M, noise, pw=None):
             continue
         # per-stage phase delay at the crossover, and its typical counterpart
         rows = []
+        S15, S80 = stages(h, 0.15, mot_med, dyn), stages(h, 0.8, mot_med, dyn)
+        St15, St80 = stages(Ht, 0.15, mot_med, dyn_t), stages(Ht, 0.8, mot_med, dyn_t)
+        at = lambda SS, k: next((delay_at(x["H"], fc) for x in SS if x["key"] == k), 0.0)
         for s in S:
             if s["chain"] == "yawp" and ax != 2:
                 continue
             v = delay_at(s["H"], fc)
-            rows.append(dict(key=s["key"], label=s["label"], chain=s["chain"], ms=round(v, 3), deg=round(v / 1000 * 360 * fc, 2)))
+            thr_ms = (at(S15, s["key"]), at(S80, s["key"])) if s["spec"].get("dyn") else None
+            wi = []
+            for lbl, upd, ndyn, cli in whatifs(h, s["key"], dyn, cand):
+                if "default" not in lbl and lbl != "off" and _is_default(upd):
+                    lbl += " (= Betaflight default)"
+                H2 = {**h, **upd}
+                S2 = stages(H2, hover_thr, mot_med, dyn if ndyn is None else ndyn)
+                ms2 = at(S2, s["key"])
+                m2 = margins(loop(H2, S2, pl, g, ax, f, km, kd)[0], f)
+                ch = s["chain"] if s["chain"] in simp else None
+                if ch and simp[ch] and s["kind"] == "lpf":
+                    cli = f"set simplified_{ch}_filter = OFF\n" + cli      # the slider would overwrite typed cutoffs
+                wi.append(dict(label=lbl, cli=cli, ms=round(ms2, 3), d_ms=round(ms2 - v, 3), pm=None if m2["pm"] is None else round(m2["pm"], 1),
+                               d_pm=None if None in (m2["pm"], m["pm"]) else round(m2["pm"] - m["pm"], 1), fc=None if m2["fc"] is None else round(m2["fc"], 1)))
+            rows.append(dict(key=s["key"], label=s["label"], chain=s["chain"], kind=s["kind"], ms=round(v, 3), deg=round(v / 1000 * 360 * fc, 2),
+                             spec=[r[:2] + [r[2]] for r in s["rows"]], parts=[[lb, round(delay_at(fn, fc), 3)] for lb, fn in s["parts"]],
+                             why=explain(s, fc, v, thr_ms), thr_ms=None if thr_ms is None else [round(x, 3) for x in thr_ms], whatif=wi))
         tmap = {}
         for s in St:
             if s["chain"] == "yawp" and ax != 2:
                 continue
             v = delay_at(s["H"], fc)
-            tmap[s["key"]] = dict(label=s["label"], ms=round(v, 3))
+            thr_ms = (at(St15, s["key"]), at(St80, s["key"])) if s["spec"].get("dyn") else None
+            spec = [r[:2] + [r[2]] for r in s["rows"]]
+            if s["key"] == "dyn_notch":
+                spec = [r if r[0] != "Centres" else ["Centres", dyn_t_src, None] for r in spec]
+            tmap[s["key"]] = dict(label=s["label"], chain=s["chain"], ms=round(v, 3), spec=spec, src=tsrc.get(s["key"], ""), why=explain(s, fc, v, thr_ms),
+                                  parts=[[lb, round(delay_at(fn, fc), 3)] for lb, fn in s["parts"]])
+        d_off = not (g.get("D") or 0) > 0
         for r in rows:
             t_ = tmap.get(r["key"])
             tiny = abs(r["ms"]) < 0.05
+            r["inactive"] = bool(d_off and r["chain"] == "dterm")
             r["typ_ms"] = t_["ms"] if t_ else 0.0
+            r["typ"] = t_                 # the reference's own numbers for this stage (None: the reference doesn't have it)
             r["ratio"] = round(r["ms"] / t_["ms"], 2) if t_ and t_["ms"] > 0.01 else None
-            r["verdict"] = "good" if tiny else ("serious" if r["ms"] > 0.15 else "warning") if r["ratio"] is None else _verdict_ratio(r["ratio"], tiny)
+            r["verdict"] = "inactive" if r["inactive"] else "good" if tiny else ("serious" if r["ms"] > 0.15 else "warning") if r["ratio"] is None else _verdict_ratio(r["ratio"], tiny)
         extra = [k for k in tmap if k not in {r["key"] for r in rows} and (k != "yaw_lpf" or ax == 2)]
+        prog(ax / 3 + 0.12, f"{a}: sweeping the low-pass cutoffs ×0.5–×2 (63 loop variants) and the P/D headroom (57)")
         # timing that is not filtering, at the same frequency
         tau = pl["tau_ms"] / 1000; w = 2 * np.pi * fc
-        timing = [dict(key="loop", label=f"PID loop timing (1.5 × {1000 / fs_p:.3f} ms)", ms=round(1.5 * 1000 / fs_p, 3)),
-                  dict(key="esc", label="ESC + motor command delay (measured)", ms=round(float(pl["delay_ms"]), 3)),
-                  dict(key="motor", label=f"Motor spin-up lag τ = {float(pl['tau_ms']):.0f} ms (equivalent at f_c)", ms=round(float(np.arctan(w * tau) / w * 1000), 3))]
+        mot_ms = float(np.arctan(w * tau) / w * 1000)
+        timing = [dict(key="loop", label=f"PID loop timing (1.5 × {1000 / fs_p:.3f} ms)", ms=round(1.5 * 1000 / fs_p, 3),
+                       why=f"Betaflight runs the PID once per loop ({fs_p:.0f} Hz) on the newest filtered gyro sample, and the motors get the result at "
+                           f"the end of that loop: on average 1.5 loop periods between the quad moving and the motors reacting. Only a faster PID loop "
+                           f"(pid_process_denom) shortens it; at {fs_p / 2:.0f} Hz it would be {3000 / fs_p:.2f} ms."),
+                  dict(key="esc", label="ESC + motor command delay (measured)", ms=round(float(pl["delay_ms"]), 3),
+                       why=f"Measured from this log as the dead time between the motor command and the eRPM response: DShot frame, ESC processing and "
+                           f"the motor's electrical response. Logged at {lg.fs:.0f} Hz, so it is resolved to about {1000 / lg.fs:.1f} ms."),
+                  dict(key="motor", label=f"Motor spin-up lag τ = {float(pl['tau_ms']):.0f} ms (equivalent at f_c)", ms=round(mot_ms, 3),
+                       why=f"Props need time to change speed: τ = {float(pl['tau_ms']):.0f} ms, learned from this flight (command → eRPM and the loop fit). "
+                           f"A first-order lag costs atan(2π·f·τ) / (2π·f) = {mot_ms:.2f} ms of equivalent delay at {fc:.0f} Hz "
+                           f"({np.degrees(np.arctan(w * tau)):.0f}° of phase). Lighter props, higher motor KV or voltage make it shorter; filters can't change it.")]
         # P path (gyro chain) and D path (gyro + D-term chain) totals at f_c
         p_ms = sum(r["ms"] for r in rows if r["chain"] in ("gyro",) + (("yawp",) if ax == 2 else ()))
         d_ms = sum(r["ms"] for r in rows if r["chain"] in ("gyro", "dterm"))
@@ -304,7 +570,7 @@ def analyse(lg, prof, M, noise, pw=None):
                               phase_used=round(used, 2), phase_spare=round(spare, 2), share=None if share is None else round(share, 3),
                               thr=dict(t=(thr_axis * 100).round(1).tolist(), p=pd_thr, d=dd_thr), mults=mults.round(3).tolist(), sweep=sweep, headroom=head,
                               noise_pct=None if nz_now is None else round(nz_now, 3), noise_meas=None if nz_meas is None else round(nz_meas, 3), excited_hz=pl.get("excited_hz"), status=pl.get("status"), conf=pl.get("conf"),
-                              gains=dict(P=g["P"], I=g["I"], D=g["D"], kp_mul=km, kd_mul=kd))
+                              gains=dict(P=g["P"], I=g["I"], D=g["D"], kp_mul=km, kd_mul=kd), d_off=d_off)
     # model check: predicted vs measured motor noise above 80 Hz (all axes add at each motor)
     pv = [(out["axes"][a]["noise_pct"], out["axes"][a]["noise_meas"]) for a in out["axes"] if out["axes"][a]["noise_pct"] is not None and out["axes"][a]["noise_meas"]]
     out["check"] = dict(pred_motor_pct=round(float(np.sqrt(sum(p * p for p, _ in pv))), 3) if pv else None,
@@ -372,7 +638,7 @@ def findings(D, h, prof):
                    f"at {fc:.0f} Hz, so every bit of filter delay shows.")
         else:
             why = f"Without filtering it would have {m0['pm']:.0f}°; the filters use {min(used / spare, 9.99) * 100:.0f}% of the phase the loop can spare above the 45° target."
-        cmp_t = "" if mt["pm"] is None else f" With a typical {inch:g}″ filter setup it would be {mt['pm']:.0f}°."
+        cmp_t = "" if mt["pm"] is None else f" With the reference filters ({D['ref_label'].lower()}) it would be {mt['pm']:.0f}°."
         F.append(finding(lvl, f"{a.capitalize()}: {m['pm']:.0f}° phase margin at the {fc:.0f} Hz crossover, the filters take {used:.0f}° of it",
                          why,
                          f"The crossover is where the loop gain is 1; the phase left there decides how well the quad damps a kick (45° is the usual target, "

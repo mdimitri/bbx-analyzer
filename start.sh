@@ -96,6 +96,9 @@ install_pkgs() {
   "$VPY" -m pip download --disable-pip-version-check -q --no-deps "orangebox==0.5.0" -d .venv/dl || return 1
   "$VPY" -c "import zipfile,glob,sysconfig; zipfile.ZipFile(glob.glob('.venv/dl/orangebox-*.whl')[0]).extractall(sysconfig.get_paths()['purelib'])" || return 1
   "$VPY" -c "import fastapi, uvicorn, numpy, multipart, orangebox" || return 1
+  # optional: numba compiles the simulator's inner loops (learning a quad's dynamics ~3-5x faster); fine without it
+  "$VPY" -m pip install --disable-pip-version-check -q "numba>=0.59" >/dev/null 2>&1 || say "  (optional speed-up 'numba' isn't available for this Python: analyses run a bit slower)"
+  return 0
 }
 if ! cmp -s requirements.txt .venv/.installed 2>/dev/null; then
   say "> Installing the analysis packages..."

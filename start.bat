@@ -76,6 +76,8 @@ rmdir /s /q ".venv\dl" >nul 2>&1
 "%VPY%" -m pip download --disable-pip-version-check -q --no-deps orangebox==0.5.0 -d ".venv\dl" || exit /b 1
 "%VPY%" -c "import zipfile,glob,sysconfig; zipfile.ZipFile(glob.glob('.venv/dl/orangebox-*.whl')[0]).extractall(sysconfig.get_paths()['purelib'])" || exit /b 1
 "%VPY%" -c "import fastapi, uvicorn, numpy, multipart, orangebox" || exit /b 1
+rem optional: numba compiles the simulator's inner loops (learning a quad's dynamics ~3-5x faster); fine without it
+"%VPY%" -m pip install --disable-pip-version-check -q "numba>=0.59" >nul 2>&1 || echo   (optional speed-up 'numba' isn't available for this Python: analyses run a bit slower)
 exit /b 0
 
 :shortcut

@@ -23,6 +23,7 @@ real stick movement are used; an axis the pilot hardly moved can't be identified
 from another flight of the same craft with the same motor dynamics, and labelled so).
 """
 import numpy as np
+import simcore
 from tuning import hnum, dyn_cutoff, rpm_notch
 
 PT_CORR = {1: 1.0, 2: 1.553773974, 3: 1.961459177}
@@ -143,6 +144,8 @@ class Stage:
 
 def _pt(x, fc, fs, order=1):
     om = 2 * np.pi * fc * PT_CORR[order] / fs; k = om / (om + 1); y = np.asarray(x, float)
+    if simcore.HAVE and len(y):
+        return simcore.pt_run(np.ascontiguousarray(y), float(k), int(order))
     for _ in range(order):
         o = np.empty_like(y); s = y[0]
         for i, v in enumerate(y):
@@ -195,6 +198,8 @@ def motor_dynamics(lg, air=None):
 
 
 def _run_stages(x, stages):
+    if simcore.HAVE:
+        return simcore.cascade(np.asarray(x, float), *simcore.pack(stages, 1))
     y = np.empty(len(x))
     for k in range(len(x)):
         v = np.array([x[k]])
@@ -275,6 +280,8 @@ def lp_zero(x, fs, fc=FIT_HZ):
     b0 = K * K * nrm; b1 = 2 * b0; b2 = b0; a1 = 2 * (K * K - 1) * nrm; a2 = (1 - K * q + K * K) * nrm
 
     def run(z):
+        if simcore.HAVE:
+            return simcore.biquad_rows(np.ascontiguousarray(z), b0, b1, b2, a1, a2)
         y = np.empty_like(z); x1 = x2 = z[:, 0].copy(); y1 = y2 = z[:, 0].copy()
         for k in range(z.shape[1]):
             v = z[:, k]; o = b0 * v + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2
@@ -350,6 +357,16 @@ def closed_loop(lg, ax, seg, W, h, g, prm, kfac=None, tscale=None, state=False):
     bst1 = Stage(dict(k="pt", order=2, fc=85), fs, L, 0.0); bst2 = Stage(dict(k="pt", order=2, fc=35), fs, L, 0.0)
     dgain = 0.00008 * ctl["dmax_gain"] / 35; sgain = 0.00008 * ctl["dmax_gain"] * ctl["dmax_adv"] / 100 / 35
     out = np.empty((L, W)); relax = ctl["relax"] >= 1 and ax < 2
+    if simcore.HAVE:      # compiled: same arithmetic, lanes in parallel
+        f64 = lambda v: np.ascontiguousarray(np.broadcast_to(np.asarray(v, float), (L,)))
+        gp, dp = simcore.pack(G, L), simcore.pack(Dch, L)
+        out = simcore.loop(*gp, *dp, np.ascontiguousarray(sp), np.ascontiguousarray(F_log), f64(kp), f64(kd), f64(kdmax), float(ki), float(lim), float(ilim),
+                           float(ylp.kk) if ylp is not None else 0.0, f64(p0), float(relk), bool(relax), int(ctl["relax_type"]), float(sgain), float(dgain),
+                           float(bst1.kk), float(bst2.kk), np.ascontiguousarray(buf), int(H), np.ascontiguousarray(dl.astype(np.int64)), f64(trim), f64(m),
+                           f64(kt), f64(b), f64(a), f64(lam), f64(w), f64(I), float(fs))
+        if state:
+            return out, gy_real, si, dict(trim=trim, m0=m0, uhist=hist[:, pre:], x0=x0)
+        return out, gy_real, si
     for k in range(W):
         gf = w
         for st in G: gf = st(gf)
@@ -413,7 +430,12 @@ def frf(lg, ax, seg, W, ys):
     return f, Sxy / (Sxx + 1e-12), Sxx, X
 
 
+RATE = {True: 8e-8, False: 6e-7}   # seconds per simulated lane-sample incl. scoring (compiled / numpy), refined as it runs
+
+
 def _search(lg, ax, seg, W, h, g, prm, kfac, tsc, max_lanes=3000):
+    import time
+    t_start = time.time()
     P, S = len(prm["b"]), len(seg)
     step = max(1, max_lanes // S)
     errs, Hss = [], []
@@ -435,6 +457,7 @@ def _search(lg, ax, seg, W, h, g, prm, kfac, tsc, max_lanes=3000):
     jf = (wt * abs(Hs - Hr) ** 2).sum(1) / max((wt * abs(Hr) ** 2).sum(), 1e-12) if wt.sum() > 0 else np.zeros(P)
     cost = jt + FRF_W * jf
     cost[~np.isfinite(cost)] = 1e9
+    RATE[simcore.HAVE] = 0.5 * RATE[simcore.HAVE] + 0.5 * (time.time() - t_start) / max(P * S * W, 1)
     j = int(np.argmin(cost))
     fit = 100 * (1 - np.sqrt(np.clip(err[j] / var, 0, 4)))
     return dict(b=float(prm["b"][j]), tau=float(prm["tau"][j]), d=int(prm["d"][j]), a=float(prm["a"][j]), lam=float(prm["lam"][j]),
@@ -490,11 +513,35 @@ def _tscale(lg, seg, W, md):
     return np.clip(md["hz"] / np.maximum(mhz, 1), 0.6, 1.6)
 
 
-def identify(lg, ax, prof=None, nseg=32, win=1.0):
+def _grid_sizes(lg, ax, nseg, md):
+    """Number of candidate plants in the coarse search and in each refinement (for the time estimate)."""
+    nl = 5 if ax == 2 else 1
+    nx = len(XD_MS)
+    return [10 * (3 if md else 4) * 3 * nl * nx, 7 * 3 * 3 * (3 if ax == 2 else 1) * (3 if nx > 1 else 1)] + [7 * 3 * 3 * (3 if ax == 2 else 1) * (3 if nx > 1 else 1)]
+
+
+def expected_seconds(lg, nseg=32, win=1.0):
+    """Time model_report() will take (s), from the lanes each search simulates and the measured work rate."""
+    md = _motor(lg)
+    W = int(win * lg.fs); tot = 0.0
+    for ax in range(3):
+        S = len(_segments(lg, ax, n=nseg, win=win)[0])
+        if S >= 4:
+            tot += sum(_grid_sizes(lg, ax, nseg, md)) * S * W * RATE[simcore.HAVE]
+        tot += 30 * 2 * lg.fs * RATE[simcore.HAVE] * 1.5 + 0.15        # validation replay + like-for-like step response
+    return tot + 0.3
+
+
+def identify(lg, ax, prof=None, nseg=32, win=1.0, cb=None):
     h, fs, c = lg.headers, lg.fs, lg.cols
+    cb = cb or (lambda *a, **k: None)
     seg, W = _segments(lg, ax, n=nseg, win=win)
     if len(seg) < 4:
         return None
+    sizes = _grid_sizes(lg, ax, nseg, _motor(lg))
+    eta = lambda P: P * len(seg) * W * RATE[simcore.HAVE]
+    tot = sum(sizes) * len(seg) * W * RATE[simcore.HAVE] or 1
+    edges = np.cumsum([0] + [z * len(seg) * W * RATE[simcore.HAVE] / tot for z in sizes]) * 0.85 + 0.03
     g = pids(h)[AXN[ax]]
     inch = ((prof or {}).get("used") or {}).get("inch", 5)
     md = _motor(lg)
@@ -510,6 +557,8 @@ def identify(lg, ax, prof=None, nseg=32, win=1.0):
     lams = np.array([0.0, 0.4, 0.8, 1.2, 1.6]) if ax == 2 else np.array([0.0])
     tsg = np.array([0.75, 1.0, 1.3]) if md else np.array([0.5, 0.8, 1.2, 1.8])
     Gd = np.array(np.meshgrid(b0 * 2.0 ** np.linspace(-1.5, 3, 10), tsg, [0.0, 3.0, 8.0], lams, dn + np.array(xds), indexing="ij")).reshape(5, -1)
+    cb(edges[0], f"coarse search · {Gd.shape[1]} candidate plants × {len(seg)} stick-active 1 s windows = {Gd.shape[1] * len(seg):,} closed-loop simulations",
+       edges[1], eta(Gd.shape[1]))
     best = _search(lg, ax, seg, W, h, g, dict(b=Gd[0], tau=Gd[1] * tau0, d=Gd[4].astype(int), a=Gd[2], lam=Gd[3]), kfac, tsc)
     for it, sc in enumerate((0.5, 0.25)):
         lam_c = np.clip(best["lam"] + np.array([-0.2, 0, 0.2]) * (1 if it == 0 else 0.5), 0, 2.5) if ax == 2 else np.array([0.0])
@@ -517,6 +566,8 @@ def identify(lg, ax, prof=None, nseg=32, win=1.0):
         dd = np.unique(np.clip(best["d"] + np.array([-1, 0, 1]) * max(1, int(round(fs / 1000 * (1.5 if it == 0 else 0.5)))), dn, dn + int(0.02 * fs))) if len(xds) > 1 else np.array([best["d"]])
         Gd = np.array(np.meshgrid(best["b"] * 2.0 ** (np.linspace(-1, 1, 7) * sc), np.unique(tl),
                                   np.unique(np.clip(best["a"] + np.array([-1, 0, 1]) * (4 if it == 0 else 2), 0, 40)), lam_c, dd, indexing="ij")).reshape(5, -1)
+        cb(edges[1 + it], f"refining ({it + 1}/2) around authority {best['b']:.0f}, motor lag {best['tau'] * 1000:.0f} ms · {Gd.shape[1]} candidates × {len(seg)} windows"
+           f" · fit so far {best['fit_pct']:.0f}%", edges[2 + it], eta(Gd.shape[1]))
         best = _search(lg, ax, seg, W, h, g, dict(b=Gd[0], tau=Gd[1], d=Gd[4].astype(int), a=Gd[2], lam=Gd[3]), kfac, tsc)
     # how far up the sticks really excited this axis: highest frequency below which the setpoint → gyro coherence stays
     # ≥ 0.5 (allowing one dip). Margins at a crossover above this are extrapolated from the measured motor lag.
@@ -536,6 +587,23 @@ def identify(lg, ax, prof=None, nseg=32, win=1.0):
 
 # ---------------------------------------------------------------- report + per-craft memory
 MODEL_V = 3   # 3: per-motor RPM notches + static/dynamic notches in the filter chain
+_CODE = None
+
+
+def code_id():
+    """Fingerprint of the code a cached model depends on: any change to it invalidates the cache."""
+    global _CODE
+    if _CODE is None:
+        import hashlib
+        from pathlib import Path
+        hsh = hashlib.sha1(str(MODEL_V).encode())
+        for fn in ("sim.py", "simcore.py", "tuning.py", "quad.py", "delay.py", "bbl.py", "flight.py"):
+            try:
+                hsh.update((Path(__file__).parent / fn).read_bytes())
+            except OSError:
+                pass
+        _CODE = hsh.hexdigest()[:16]
+    return _CODE
 
 
 def _cache_path(lg):
@@ -592,9 +660,12 @@ def _model_report(lg, prof=None):
     hover_thr = float(np.median(thr[air])) / 100 if air.any() else 0.3
     mhz = float(np.median(np.mean(motor, 0)[air])) if motor and air.any() else None
     inch = ((prof or {}).get("used") or {}).get("inch", 5)
-    from bbl import progress
-    progress(lg.path.name, lg.idx, "sim", "Measuring motor lag from command vs eRPM", 0.02)
+    from bbl import progress, Job
+    j = Job(lg, "sim", [("Motor lag from command vs eRPM", 0.4), ("Roll dynamics", 3.2), ("Pitch dynamics", 3.2), ("Yaw dynamics", 3.2)])
+    j.step(0, "Cross-spectrum of motor command and measured rotor speed, fitted as gain · delay / (lag · s + 1)", eta=0.3)
     md = _motor(lg)
+    if md:
+        j.note(f"lag {md['tau'] * 1000:.0f} ms, delay {md['d'] * 1000:.1f} ms")
     out = dict(fs_log=round(fs), pids=pids(h), ctl=controller(h, hover_thr), hover_thr=round(hover_thr * 100, 1), motor_hz=None if mhz is None else round(mhz, 1),
                inch=inch, axes={}, fit_hz=FIT_HZ, min_exc=MIN_EXC,
                motor=None if md is None else dict(tau_ms=round(md["tau"] * 1000, 1), delay_ms=round(md["d"] * 1000, 1), hz=round(md["hz"], 1),
@@ -605,10 +676,9 @@ def _model_report(lg, prof=None):
     mot_med = [float(np.median(m[air])) for m in motor] if motor and air.any() else mhz
     g_, d_ = filters(h, hover_thr, mot_med, dyn)
     out["filters"] = dict(gyro=g_, dterm=d_, dyn_src=dyn_src)
-    from bbl import progress
     for ax in range(3):
-        progress(lg.path.name, lg.idx, "sim", f"Learning the {AXN[ax]} dynamics from your flight ({ax + 1}/3)", ax / 3)
-        r = identify(lg, ax, prof)
+        j.step(1 + ax, f"Finding the stick-active parts of the flight for {AXN[ax]}", eta=0.1)
+        r = identify(lg, ax, prof, cb=lambda rel, d, nx=None, eta=None, ax=ax: j.sub(rel, f"{AXN[ax].capitalize()} · {d}", nx, eta))
         if r is not None:
             r["status"] = "ok"
             r["conf"] = "high" if r["fit_pct"] >= 75 else "medium" if r["fit_pct"] >= 55 else "low"
@@ -646,7 +716,10 @@ def _model_report(lg, prof=None):
                             m0=round(float(st["m0"][0]), 3), uhist=np.round(st["uhist"][0], 2).tolist(), trim=round(float(st["trim"][0]), 3),
                             kp_mul=round(float(kf[0][0]), 3), kd_mul=round(float(kf[1][0]), 3), thr=round(float(thr[sl].mean()), 1),
                             fit=round(float(100 * (1 - np.sqrt(min(4.0, err[0, 0] / var[0])))), 1), sp_std=round(float(np.std(c[f"setpoint[{ax}]"][sl])), 1))
+        j.sub(0.9, f"{AXN[ax].capitalize()} · checking the model: replaying your sticks through it, step response like-for-like", 1.0, 0.5)
         r["step_ll"] = step_like_for_like(lg, ax, r) if r["status"] == "ok" else None
+        j.note(f"fit {r['fit_pct']:.0f}% · lag {r['tau_ms']:.0f} ms · delay {r['delay_ms']:.1f} ms" if r.get("fit_pct") is not None
+               else {"borrowed": "borrowed from another flight of this craft", "no_excitation": "too little stick movement: rough"}.get(r["status"], r["status"]))
         # measured noise (raw gyro above ~60 Hz) to optionally inject into the simulation
         if f"gyroUnfilt[{ax}]" in c:
             s = seg[0] if seg else int(len(thr) / 2)

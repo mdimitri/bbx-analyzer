@@ -30,24 +30,41 @@ def _memo(lg, key, fn):
     return m[key]
 
 
-def gather(lg, prop=None, blades=None, auw=None):
-    """Run (or reuse) every analysis the plan and the comparison need. Errors become None, never a crash."""
+GATHER = [("profile", "Quad profile: prop size, weight, hover", "From hover motor speed, the thrust law for the prop size and the logged current"),
+          ("noise", "Gyro noise spectrum", "Welch spectra of raw and filtered gyro, motor harmonics tracked with eRPM"),
+          ("step", "Step response", "Deconvolving the gyro by the setpoint over the stick-active parts of the flight"),
+          ("motors", "Motors and power", "Motor balance, saturation, eRPM and current"),
+          ("pidterms", "PID terms", "What P, I, D and feedforward put out, by axis"),
+          ("propwash", "Propwash events", "Finding the throttle chops and measuring the wobble after each"),
+          ("fplan", "Filter planner proposal", "Resonance search and the filter set that clears it with the least delay")]
+
+
+def gather(lg, prop=None, blades=None, auw=None, task=None):
+    """Run (or reuse) every analysis the plan and the comparison need. Errors become None, never a crash.
+    task: name to report progress under (each analysis is one step)."""
+    from bbl import Job
     k = (prop, blades)
+    fns = dict(profile=lambda: lg.profile(prop, blades, auw), noise=lambda: lg.noise(prop=prop, blades=blades),
+               step=lambda: lg.step_response(prop=prop, blades=blades), motors=lambda: lg.motors(),
+               pidterms=lambda: lg.flight("pidterms", prop=prop, blades=blades), propwash=lambda: lg.flight("propwash", prop=prop, blades=blades),
+               fplan=lambda: lg.filterplan(prop=prop, blades=blades))
+    out = {}
 
     def safe(name, fn):
         try:
-            return _memo(lg, (name,) + k, fn)
+            return fn() if name == "profile" else _memo(lg, (name,) + k, fn)
         except Exception as e:   # one failing analysis must not sink the plan
             return {"error": f"{type(e).__name__}: {e}"[:200]}
-    return dict(
-        profile=lg.profile(prop, blades, auw),
-        noise=safe("noise", lambda: lg.noise(prop=prop, blades=blades)),
-        step=safe("step", lambda: lg.step_response(prop=prop, blades=blades)),
-        motors=safe("motors", lambda: lg.motors()),
-        pid=safe("pidterms", lambda: lg.flight("pidterms", prop=prop, blades=blades)),
-        propwash=safe("propwash", lambda: lg.flight("propwash", prop=prop, blades=blades)),
-        fplan=safe("fplan", lambda: lg.filterplan(prop=prop, blades=blades)),
-    )
+    todo = [g for g in GATHER if g[0] == "profile" or (g[0],) + k not in getattr(lg, "_memo", {})]
+    with Job(lg, task or "plan", [(g[1], 1) for g in GATHER]) as j:
+        for i, (name, label, how) in enumerate(GATHER):
+            fresh = any(t[0] == name for t in todo) and name != "profile"
+            j.step(i, how if fresh else "already done", eta=0.6 if fresh else 0.05)
+            out[name] = safe(name, fns[name])
+            if fresh:
+                j.note("done" if not (isinstance(out[name], dict) and out[name].get("error")) else "failed: skipped")
+    return dict(profile=out["profile"], noise=out["noise"], step=out["step"], motors=out["motors"], pid=out["pidterms"],
+                propwash=out["propwash"], fplan=out["fplan"])
 
 
 def _item(step, text, why="", cli=(), on=True, level="info", tab=None, src="", optional=False, note=""):
@@ -371,7 +388,7 @@ def _overlay(ga, gb):
 
 def report_data(lg, prop=None, blades=None, auw=None):
     """Everything the PDF report needs, from the same (memoised) analyses as the plan."""
-    G = gather(lg, prop, blades, auw)
+    G = gather(lg, prop, blades, auw, task="report")
     ok = lambda d: isinstance(d, dict) and not d.get("error")
     P, nz, st, mo, pt, pw = (G[k] for k in ("profile", "noise", "step", "motors", "pid", "propwash"))
     h = lg.headers

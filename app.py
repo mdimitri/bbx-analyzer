@@ -36,6 +36,15 @@ from version import VERSION
 app = FastAPI(title="BBX Analyzer", version=VERSION, default_response_class=SafeJSON)
 
 
+def _warm():
+    import threading
+    import simcore
+    threading.Thread(target=simcore.warmup, daemon=True).start()   # compile the simulator kernels while the browser opens
+
+
+_warm()
+
+
 _lock = Lock()
 
 
@@ -57,7 +66,9 @@ def progress_(name: str, idx: int = 1):
     import time
     from bbl import PROGRESS
     d = PROGRESS.get(f"{Path(name).name}|{idx}", {})
-    return {k: {**v, "elapsed": round(time.time() - v["t0"], 1)} for k, v in list(d.items())}
+    now = time.time()
+    return {k: {**v, "elapsed": round(now - v["t0"], 1), "since": round(now - v.get("ts", now), 2), "in_step": round(now - v.get("tstep", now), 1)}
+            for k, v in list(d.items())}
 
 
 @app.get("/api/version")
@@ -150,17 +161,43 @@ def simmodel(name: str, idx: int, prop: float = None, blades: int = None, auw: f
 @app.get("/api/{name}/{idx}/plan")
 def plan_(name: str, idx: int, prop: float = None, blades: int = None, auw: float = None):
     import plan
-    return plan.build_plan(get(name, idx), prop, blades, auw)
+    lg = get(name, idx)
+    return plan.build_plan(lg, prop, blades, auw, plan.gather(lg, prop, blades, auw, task="plan"))
 
 
 @app.get("/api/{name}/{idx}/delay")
-def delay_(name: str, idx: int, prop: float = None, blades: int = None):
-    """Filter-delay analysis: per-stage phase delay at each axis's crossover, margins with the learned plant, sweeps."""
+def delay_(name: str, idx: int, prop: float = None, blades: int = None, ref: str = "bf"):
+    """Filter-delay analysis: per-stage phase delay at each axis's crossover, margins with the learned plant, sweeps.
+    ref: what 'typical' means: 'bf' Betaflight firmware defaults, 'size' those defaults scaled for the prop size."""
     import delay, plan
+    from bbl import Job
     lg = get(name, idx)
-    noise = plan._memo(lg, ("noise", prop, blades), lambda: lg.noise(prop=prop, blades=blades))
-    pw = plan._memo(lg, ("propwash", prop, blades), lambda: lg.flight("propwash", prop=prop, blades=blades))
-    return plan._memo(lg, ("delay", prop, blades), lambda: delay.analyse(lg, lg.profile(prop, blades), lg.simmodel(prop, blades), noise, pw))
+    memo = lg.__dict__.setdefault("_memo", {})
+    if ("delay", prop, blades, ref) in memo:
+        return memo[("delay", prop, blades, ref)]
+    with Job(lg, "delay", [("Gyro noise spectrum", 1), ("Propwash events", 1), ("This quad's dynamics, learned from the flight", 8),
+                           ("Filter stages, crossover and margins", 2)]) as j:
+        j.step(0, "Welch spectra of the raw and filtered gyro, residual noise peaks after the RPM filter", eta=0.6)
+        noise = plan._memo(lg, ("noise", prop, blades), lambda: lg.noise(prop=prop, blades=blades))
+        j.note(f"{len(noise.get('dyn_cand') or [])} residual noise peaks" if isinstance(noise, dict) else "")
+        j.step(1, "Finding the throttle chops and measuring the wobble after each", eta=0.6)
+        pw = plan._memo(lg, ("propwash", prop, blades), lambda: lg.flight("propwash", prop=prop, blades=blades))
+        if isinstance(pw, dict) and pw.get("pw_freq"):
+            j.note(f"rings at {pw['pw_freq']:.0f} Hz")
+        cached = lg.sim_cached(prop, blades)
+        j.step(2, "Loaded from the cache" if cached else "Fitting authority, motor lag, delay and damping per axis to your stick inputs", eta=0.2 if cached else sim_eta(lg))
+        M = lg.simmodel(prop, blades)
+        j.note("from cache" if cached else "fit " + ", ".join(f"{a} {r['fit_pct']:.0f}%" for a, r in (M.get("axes") or {}).items() if r.get("fit_pct") is not None))
+        j.step(3, "Delay of each filter at the crossover, what-ifs, sweeps and headroom", eta=1.0)
+        D = delay.analyse(lg, lg.profile(prop, blades), M, noise, pw, ref=ref, prog=lambda fr, d: j.sub(fr, d, min(1.0, fr + 1 / 3 * 0.4), 0.3))
+        memo[("delay", prop, blades, ref)] = D
+        return D
+
+
+def sim_eta(lg):
+    """Rough time to learn the dynamics (s): measured work rate × the lanes the search runs."""
+    import sim
+    return sim.expected_seconds(lg)
 
 
 @app.get("/api/{name}/{idx}/report")
@@ -176,14 +213,18 @@ def compare_(a: str, b: str, ai: int = 1, bi: int = 1, pa: float = None, ba: int
     import plan
     from bbl import progress
     A, B = get(a, ai), get(b, bi)
-    progress(b, bi, "compare", "Analysing the first flight", 0.05)
-    ga = plan.gather(A, pa, ba, wa)
-    progress(b, bi, "compare", "Analysing the second flight", 0.5)
-    gb = plan.gather(B, pb, bb, wb)
-    progress(b, bi, "compare", done=True)
-    out = plan.compare(A, B, ga, gb)
-    out["plan_b"] = plan.build_plan(B, pb, bb, wb, gb)
-    return out
+    st = [f"Before: {Path(a).name}", f"After: {Path(b).name}", "Scorecard, differences and the next plan"]
+    try:
+        progress(b, bi, "compare", "Noise, step response, motors, PID terms, propwash and the filter proposal", 0.0, steps=st, step=0, nxt=0.45, eta=4)
+        ga = plan.gather(A, pa, ba, wa, task="cmp")
+        progress(b, bi, "compare", "The same analyses on the second flight", 0.45, steps=st, step=1, nxt=0.9, eta=4)
+        gb = plan.gather(B, pb, bb, wb, task="cmp")
+        progress(b, bi, "compare", "Matching the metrics and building the plan for the next flight", 0.9, steps=st, step=2, nxt=1.0, eta=0.5)
+        out = plan.compare(A, B, ga, gb)
+        out["plan_b"] = plan.build_plan(B, pb, bb, wb, gb)
+        return out
+    finally:
+        progress(b, bi, "compare", done=True)
 
 
 @app.get("/api/{name}/{idx}/{kind}")

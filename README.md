@@ -4,6 +4,8 @@
 
 It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 2.0.**
 
+The launchers also install `numba` when it's available for your Python: it compiles the simulator's inner loops, so learning a quad's dynamics takes a few seconds instead of ~15. Without it everything still works, just slower. Learned models are cached next to the log (`*.sim.json`), so reopening a log is instant.
+
 ---
 
 ## Get started (about 2 minutes)
@@ -32,7 +34,7 @@ If you know Blackbox Explorer or PIDtoolbox, you already have traces, spectra, s
 
 - 🧠 **A PID simulator learned from your own flight.** BBX fits your quad's real dynamics from the log: motor lag from eRPM, control authority and damping. It then runs Betaflight's PID loop and your actual filters against them. Change P, I, D, D max or FF and you see the step response, how it handles a sudden kick, and stability margins. You can also replay your real stick inputs through the new tune.
 - 🌊 **Propwash, chop by chop.** Every throttle chop is found and scored only while the sticks are still, then rated from *excellent* to *terrible*. Hover a chop and a 3D quad replays it, wobble included.
-- ⏱️ **Filter delay, explained.** Every filter's delay at the loop's crossover frequency as a stacked bar, next to a typical setup for your prop size, and what it costs the PID: phase margin with and without filtering, how far P and D could go, and a sweep of what lighter or heavier filtering would do to margin and motor noise. Betaflight's exact filter equations on the dynamics learned from your flight, checked against the logged PID output.
+- ⏱️ **Filter delay, explained.** Every filter's delay at the loop's crossover frequency as a stacked bar, next to Betaflight's firmware defaults (or those scaled for your prop size), and what it costs the PID: phase margin with and without filtering, how far P and D could go, and a sweep of what lighter or heavier filtering would do to margin and motor noise. Hover any filter for its settings next to the reference's, why it delays that much, and the exact phase margin after each possible change (with the CLI lines). Betaflight's exact filter equations on the dynamics learned from your flight, checked against the logged PID output.
 - 🔊 **Frame resonances and a filter planner.** BBX finds frame resonances that stay at one frequency while the motor noise moves with RPM. It tells you whether your filters actually remove them and proposes notches with ready-to-paste CLI. It also predicts what a change does to noise and delay before you fly it.
 - ⚙️ **Motor & prop health per motor.** It tracks each motor's own rotation, so it can say *"M3 vibrates 1.9× more than the others once per turn: unbalanced prop or bent shaft"*. It also covers load balance (which side is heavy), speed for the same command, and desync detection.
 - 🔋 **Where your battery goes.** It estimates how much power is lost to motors twitching, buzzing on noise and uneven load. Each effect is shown on your own motor traces. No current sensor needed.
