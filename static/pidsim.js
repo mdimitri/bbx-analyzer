@@ -101,7 +101,7 @@ function loopAnalysis(ax, g, useDmax = false) {
     let Gd = Gg; for (const s of D) Gd = cmul(Gd, s.H(z1));
     const one = { re: 1, im: 0 }, dz = csub(one, z1);
     let Pp = { re: kp, im: 0 }; if (ax === 2 && C.yaw_lp > 0) { const k = pt1k(C.yaw_lp, fs); Pp = cscale(cdiv({ re: k, im: 0 }, csub(one, cscale(z1, 1 - k))), kp); }
-    const Cfb = cadd(cadd(cmul(Pp, Gg), cscale(cdiv(one, dz), ki * T)), cmul(cscale(dz, kd * fs), Gd));
+    const Cfb = cadd(cadd(cmul(Pp, Gg), cmul(cscale(cdiv(one, dz), ki * T), Gg)), cmul(cscale(dz, kd * fs), Gd));   // I works on the filtered error too
     // plant (continuous) incl. delay, motor lag, rate damping, + one PID loop of computation delay
     const s = { re: 0, im: om }, tau = pl.tau_ms / 1000, lead = cadd(one, cscale(s, (pl.lam || 0) * tau));   // (1 + λτs)/(τs + 1): yaw spin-up torque
     const Gp = cdiv(cmul(cscale(cexpj(-om * (pl.delay_ms / 1000 + 1.5 * T)), pl.b), lead), cmul(cadd(one, cscale(s, tau)), cadd(s, { re: pl.a, im: 0 })));

@@ -138,6 +138,13 @@ def build_plan(lg, prop=None, blades=None, auw=None, G=None):
     except Exception:
         pass
 
+    dl = next((v for k, v in getattr(lg, "_memo", {}).items() if k[0] == "delay" and isinstance(v, dict)), None)   # only if the Filter delay tab ran
+    for f in (dl or {}).get("findings") or []:
+        pairs = cli_pairs(f.get("action"))
+        if pairs and f["level"] in ("warning", "info"):
+            items.append(_item("filters", f["title"], f.get("tldr"), cli=pairs, on=False, optional=True, level=f["level"], tab="delay", src="filter delay",
+                               note="Optional: from the Filter delay tab's loop model; try it on its own flight."))
+
     # ---- 4. PIDs and 5. feedforward (one structured source: the step-response suggestion)
     ps = st.get("pid") if ok(st) else None
     if ps:

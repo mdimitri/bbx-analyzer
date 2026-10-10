@@ -18,7 +18,7 @@ fail() {
 }
 
 say ""
-say "  bbx analyzer  -  Betaflight blackbox logs, turned into answers"
+say "  bbx analyzer v2  -  Betaflight blackbox logs, turned into answers"
 say "  ------------------------------------------------------------"
 
 # A copy inside a zip viewer or a read-only place can't hold the environment.
@@ -127,7 +127,7 @@ if [ ! -e .venv/.shortcut ]; then
   <key>CFBundleExecutable</key><string>launcher</string>
   <key>CFBundleIconFile</key><string>bbx</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleShortVersionString</key><string>2.0</string>
   <key>LSMinimumSystemVersion</key><string>10.13</string>
 </dict></plist>
 PLIST

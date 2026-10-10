@@ -5,7 +5,7 @@ function openAbout() {
   el.innerHTML = `<div class="modal about" role="dialog" aria-modal="true" aria-labelledby="abT">
     <button class="btn sm ghost xclose" id="abX" title="Close (Esc)">✕</button>
     <img class="aboutlogo" src="/static/brand/logo.svg" alt="bbx analyzer" width="300" height="80">
-    <h2 id="abT">About</h2>
+    <h2 id="abT">About <small class="hint">version ${BBX_VERSION}</small></h2>
     <p>BBX Analyzer turns a Betaflight blackbox log into answers: what the noise is and where it comes from, how the tune tracks your sticks, how the motors are doing,
       and what to try next, with every suggestion tied to what the log actually shows.</p>
     <h3>Author</h3>

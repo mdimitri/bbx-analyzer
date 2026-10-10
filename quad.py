@@ -81,7 +81,7 @@ def estimate(lg):
     ev.append(f"Hover motor speed ≈ {n_h:.0f} Hz ({n_h * 60:.0f} RPM), from {src}, at ≈ {np.median(thr[calm]) if calm.any() else np.median(thr):.0f}% throttle.")
 
     # blade count from blade-pass harmonics (median over axes)
-    raw = [c[f"gyroUnfilt[{a}]"] for a in range(3)]
+    raw = [c.get(f"gyroUnfilt[{a}]", c[f"gyroADC[{a}]"]) for a in range(3)]
     p2, p3 = [], []
     for a in range(3):
         hm, _, _ = tracked_noise(raw[a], c[f"gyroADC[{a}]"], [c[k_] for k_ in nm], fs, nh=4)

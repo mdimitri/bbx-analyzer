@@ -34,6 +34,8 @@ const api = (path, q = {}) => {
   return pr;
 };
 const API_CACHE = new Map();
+let BBX_VERSION = "2.0";
+fetch("/api/version").then(r => r.json()).then(v => { BBX_VERSION = v.version; const e = document.getElementById("ver"); if (e) e.textContent = "v" + v.version.replace(/\.0$/, ""); }).catch(() => {});
 // ---- busy indicator: what is running, live progress from the server (/api/progress) when it knows it, elapsed time ----
 const BUSY = { jobs: [], timer: 0, t0: 0 };
 const SRV_TASK = { decode: "Decoding the log", sim: "Learning this quad's dynamics", compare: "Comparing the two flights" };
@@ -126,9 +128,13 @@ const TS = {
     hint: "°/s · dotted = what you asked for (setpoint) · colour = what the quad did (gyro)",
   },
   pid: {
-    titles: AX, fields: [0, 1, 2].flatMap(i => ["P", "I", "D", "F"].map(t => `axis${t}[${i}]`)),
-    traces: d => [0, 1, 2].flatMap(i => ["D", "P", "I", "F"].map(t => [t, "PIDF".indexOf(t)]).map(([t, j]) => d[`axis${t}[${i}]`] &&
-      line(d.t, d[`axis${t}[${i}]`], t, css(["--roll", "--pitch", "--yaw", "--s4"][j]), { yaxis: `y${i + 1}`, legendgroup: t, showlegend: !i })).filter(Boolean)),
+    titles: AX,
+    fields: () => [0, 1, 2].flatMap(i => ["P", "I", "D", "F"].map(t => `axis${t}[${i}]`).concat(S.pidGy !== "off" ? [pidGyField(i)] : [])),
+    // optional grey gyro (filtered or raw) on its own right-hand °/s axis: what the PID terms are reacting to
+    traces: d => [0, 1, 2].flatMap(i => [S.pidGy !== "off" && d[pidGyField(i)] && line(d.t, d[pidGyField(i)], S.pidGy === "raw" ? "gyro raw (°/s, right axis)" : "gyro filtered (°/s, right axis)",
+        css("--muted"), { yaxis: `y${11 + i}`, line: { width: 1 }, opacity: 0.55, legendgroup: "gy", showlegend: !i })]
+      .concat(["D", "P", "I", "F"].map(t => [t, "PIDF".indexOf(t)]).map(([t, j]) => d[`axis${t}[${i}]`] &&
+      line(d.t, d[`axis${t}[${i}]`], t, css(["--roll", "--pitch", "--yaw", "--s4"][j]), { yaxis: `y${i + 1}`, legendgroup: t, showlegend: !i }))).filter(Boolean)),
     hint: "how hard P, I, D and feedforward each push, per axis", an: "pidterms",
   },
   motors: {
@@ -159,8 +165,9 @@ async function renderTS(win) {
   for (let k = 1; k <= titles.length; k++) L[k > 1 ? `yaxis${k}` : "yaxis"].fixedrange = true;
   setTimeAxes([{ axis: "xaxis", dim: "x", pair: null }]);
   $("controls").innerHTML = tbar(`<h3>${$("tabs").querySelector(".on").textContent}</h3>${S.tab === "pid" ? pidvSeg() : ""}<span class="hint" data-tip="time_nav">${T.hint} · drag = move · click the chart, then wheel = zoom · all time charts follow · double-click = whole log</span>
-    ${S.tab === "tracking" ? `<span class="tspacer"></span><span class="chips" id="vtoggle">${chip("v", "3D viewer", S.viewerOn, { tip: "viewer3d" })}</span>` : ""}`, S.tab === "tracking" ? trkGroups() : []);
-  bindPidv(); if (S.tab === "tracking") bindTrk();
+    ${S.tab === "tracking" ? `<span class="tspacer"></span><span class="chips" id="vtoggle">${chip("v", "3D viewer", S.viewerOn, { tip: "viewer3d" })}</span>` : ""}`,
+    S.tab === "tracking" ? [...trkGroups(), yscGroup()] : S.tab === "pid" ? [pidGyGroup(), yscGroup()] : []);
+  bindPidv(); if (S.tab === "tracking") bindTrk(); if (S.tab === "pid") bindPidGy(); if (YSC_TABS.includes(S.tab)) bindYsc();
   if ($("vtoggle")) $("vtoggle").onclick = async () => { S.viewerOn = !S.viewerOn; store.set("viewerOn", S.viewerOn); setupPlayer(); await render();
     requestAnimationFrame(() => $("main").data && Plotly.Plots.resize($("main"))); };   // the chart's column width changed with the viewer
   if (typeof PB !== "undefined" && PB.d) L.shapes = phShapes($("main"), PB.t);
@@ -172,8 +179,57 @@ async function renderTS(win) {
   fitMain(split ? 460 : S.tab === "tracking" && S.viewerOn ? 360 : 400);
   if (split && $("v3d")) { const hMain = parseFloat($("main").style.height), vp = document.querySelector(".vpanel");
     $("v3d").style.height = Math.max(240, hMain - (vp ? vp.offsetHeight : 0) - 12) + "px"; PB.dirty = true; }
+  if (S.tab === "pid" && S.pidGy !== "off") [0, 1, 2].forEach(i => { L[`yaxis${11 + i}`] = { overlaying: i ? `y${i + 1}` : "y", side: "right", showgrid: false, zeroline: false, fixedrange: true,
+    tickfont: { size: 9, color: css("--muted") }, title: { text: "°/s", font: { size: 9, color: css("--muted") }, standoff: 2 }, automargin: true }; });
+  if (YSC_TABS.includes(S.tab)) applyYsc(L, d, r, titles.length);
   await Plotly.react("main", T.traces(d), L, CFG);
 }
+
+// ---------- vertical scale for the Tracking and PID-term charts: auto per chart, one shared auto scale, or a fixed ± value ----------
+const YSC_TABS = ["tracking", "pid"];
+S.ysc = { tracking: { mode: "auto", v: 400 }, pid: { mode: "auto", v: 300 }, ...store.get("ysc", {}) };
+const YSC_FIELDS = { tracking: i => [`setpoint[${i}]`, `gyroADC[${i}]`, `gyroUnfilt[${i}]`], pid: i => ["P", "I", "D", "F"].map(t => `axis${t}[${i}]`) };
+const yscPos = v => Math.round(Math.log10(v / 5) / Math.log10(800) * 1000);          // slider 0..1000 ↔ 5..4000 (log)
+const yscVal = pos => { const v = 5 * 800 ** (pos / 1000); const m = 10 ** Math.floor(Math.log10(v)); return Math.round(v / m * 4) / 4 * m; };
+function yscGroup() {
+  const c = S.ysc[S.tab], unit = S.tab === "tracking" ? "°/s" : "";
+  return tg("Vertical scale", `<span class="seg" id="yscMode">${[["auto", "Auto"], ["same", "Auto · same"], ["fixed", "Fixed"]].map(([v, l]) => `<button data-v="${v}" class="${c.mode === v ? "on" : ""}">${l}</button>`).join("")}</span>
+    <label class="ctl ${c.mode === "fixed" ? "" : "dim"}">± <input id="yscR" type="range" min="0" max="1000" step="1" value="${yscPos(c.v)}"><b id="yscV">${c.v}</b> ${unit}</label>`, { tip: "ysc" });
+}
+function bindYsc() {
+  const c = S.ysc[S.tab], save = () => store.set("ysc", S.ysc);
+  $("yscMode").onclick = e => { const v = e.target.closest("button") && e.target.closest("button").dataset.v; if (!v) return; c.mode = v; save(); render(); };
+  $("yscR").oninput = e => { c.v = yscVal(+e.target.value); $("yscV").textContent = c.v; if (c.mode !== "fixed") { c.mode = "fixed"; [...$("yscMode").children].forEach(b => b.classList.toggle("on", b.dataset.v === "fixed")); $("yscR").parentElement.classList.remove("dim"); }
+    save(); const gd = $("main"), u = {}; for (let k = 1; k <= 3; k++) u[`yaxis${k > 1 ? k : ""}.range`] = [-c.v, c.v]; Plotly.relayout(gd, u); };
+}
+function applyYsc(L, d, r, n) {
+  const c = S.ysc[S.tab];
+  if (c.mode === "auto") {   // each chart fits what is on screen (Plotly's own autorange would also count the pre-fetched margins off-screen)
+    for (let i = 0; i < Math.min(3, n); i++) { let lo = Infinity, hi = -Infinity;
+      for (const f of YSC_FIELDS[S.tab](i)) { const y = d[f]; if (!y) continue;
+        for (let k = 0; k < y.length; k++) if (d.t[k] >= r[0] && d.t[k] <= r[1] && Number.isFinite(y[k])) { if (y[k] < lo) lo = y[k]; if (y[k] > hi) hi = y[k]; } }
+      const ax = L[i ? `yaxis${i + 1}` : "yaxis"];
+      if (lo > hi) { ax.autorange = true; continue; }
+      const pad = Math.max(1, (hi - lo) * 0.06); ax.range = [lo - pad, hi + pad]; ax.autorange = false; }
+    return; }
+  let lim = c.v;
+  if (c.mode === "same") {   // the largest value any of the three axes reaches in the window on screen: everything fits, on one scale
+    let m = 0;
+    for (let i = 0; i < 3; i++) for (const f of YSC_FIELDS[S.tab](i)) { const y = d[f]; if (!y) continue;
+      for (let k = 0; k < y.length; k++) if (d.t[k] >= r[0] && d.t[k] <= r[1] && Math.abs(y[k]) > m) m = Math.abs(y[k]); }
+    if (!m) return;
+    lim = Math.max(5, m * 1.06);
+  }
+  for (let k = 1; k <= Math.min(3, n); k++) { const ax = L[k > 1 ? `yaxis${k}` : "yaxis"]; ax.range = [-lim, lim]; ax.autorange = false; }
+}
+// PID-term charts: optional gyro overlay
+S.pidGy = store.get("pidGy", "off");
+const pidGyField = i => S.pidGy === "raw" && S.meta && S.meta.fields.includes(`gyroUnfilt[${i}]`) ? `gyroUnfilt[${i}]` : `gyroADC[${i}]`;
+function pidGyGroup() {
+  return tg("Gyro underneath", `<span class="seg" id="pidGy">${[["off", "Off"], ["filt", "Filtered"], ["raw", "Raw"]].map(([v, l]) => `<button data-v="${v}" class="${S.pidGy === v ? "on" : ""}"
+    ${v === "raw" && !hasRaw() ? "disabled title='gyroUnfilt is not in this log'" : ""}>${l}</button>`).join("")}</span>`, { tip: "pid_gy" });
+}
+function bindPidGy() { $("pidGy").onclick = e => { const b = e.target.closest("button"); if (!b || b.disabled) return; S.pidGy = b.dataset.v; store.set("pidGy", S.pidGy); render(); }; }
 
 // ---------- Tracking: which traces, and optional smoothing (the log stores gyro in whole °/s unless high resolution is on) ----------
 S.trk = { sp: true, filt: true, raw: false, smooth: 0, ...store.get("trk", {}) };
@@ -273,7 +329,7 @@ async function renderNoise() {
   $("controls").innerHTML = tbar(`<h3 data-tip="psd">Noise & filters</h3>${nviewSeg()}
     <span class="hint">vibration by frequency, ${S.range ? "selected part of the flight" : "whole flight"} · filter delay: gyro <b>${d.delay.gyro_ms} ms</b>, D-term <b>${d.delay.dterm_ms} ms</b> <span data-tip="delay">ⓘ</span> · <span data-tip="freq_nav">click a chart, then wheel = zoom · drag = pan</span></span>`, [
     tg("Filter curves", `<span class="chips" id="fchips">${present.map(k => chip(k, FSHORT[k] || k, on(k), { color: css(FSTYLE[k]?.[0] || "--ink"), dash: FSTYLE[k]?.[1] === "dash" })).join("")}</span>`, { tip: "filter_resp" }),
-    tg("Overlays", `<span class="chips" id="xchips">${chip("bands", "Noise bands", on("bands"), { tip: "rpm_band" })}${chip("dpsd", "D-term PSD", on("dpsd"), { tip: "tab_pid" })}</span>`),
+    tg("Overlays", `<span class="chips" id="xchips">${chip("bands", "Noise bands", on("bands"), { tip: "rpm_band" })}${chip("ppsd", "P-term", on("ppsd"), { tip: "term_psd", dash: true })}${chip("ipsd", "I-term", on("ipsd"), { tip: "term_psd", dash: true })}${chip("dpsd", "D-term", on("dpsd"), { tip: "term_psd", dash: true })}</span>`),
     tg("Axes", focusHTML()),
     tg("Frequency", `<label class="ctl"><input id="nfmin" type="number" step="10" min="0" value="${Math.round(nfr[0])}"> – <input id="nfmax" type="number" step="10" value="${Math.round(nfr[1])}"> Hz</label>
       <button class="btn sm ghost" id="nffull" ${S.nfr ? "" : "disabled"}>Full${S.nfr ? "" : " ✓"}</button>
@@ -294,7 +350,9 @@ async function renderNoise() {
     const a = d.axes[i], s = xs(c), sb = c + 1 + nC;
     tr.push(line(fx, cut(a.raw), "gyro raw", css("--muted"), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, legendgroup: "raw", showlegend: !c }));
     tr.push(line(fx, cut(a.filt), `gyro filtered · ${AX[i]}`, axc(i), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, line: { width: 2.4 } }));
-    if (on("dpsd") && a.dterm) tr.push(line(fx, cut(a.dterm), `D-term · ${AX[i]}`, axc(i), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, line: { dash: "dot", width: 1.2 } }));
+    // what each PID term puts out by frequency (PID units, same dB axis): P dashed, I dash-dot, D dotted
+    [["ppsd", "pterm", "P-term", "dash"], ["ipsd", "iterm", "I-term", "dashdot"], ["dpsd", "dterm", "D-term", "dot"]].forEach(([k, key, lab, dash]) => {
+      if (on(k) && a[key]) tr.push(line(fx, cut(a[key]), `${lab} · ${AX[i]}`, axc(i), { type: "scatter", xaxis: `x${s}`, yaxis: `y${s}`, line: { dash, width: 1.3 }, opacity: 0.9 })); });
     for (const k of present) if (on(k)) {
       const [c, dash] = FSTYLE[k] || ["--ink", "solid"], tot = k.endsWith("total");
       tr.push(line(fx, cut(d.filters[k].db), d.filters[k].label, css(c), { type: "scatter", xaxis: `x${sb}`, yaxis: `y${sb}`, legendgroup: k, showlegend: false,
@@ -393,6 +451,7 @@ function gammaTicks(lo, hi, g) {
 
 async function renderSpectro() {
   const seg = (id, opts, cur) => `<span class="seg" id="${id}">${opts.map(([v, t]) => `<button data-v="${v}" class="${v === cur ? "on" : ""}">${t}</button>`).join("")}</span>`;
+  if (!S.meta.fields.includes(`${S.src}[0]`)) S.src = "gyroADC";   // e.g. no raw gyro (gyroUnfilt) in this log
   const axesAll = [0, 1, 2].filter(i => S.meta.fields.includes(`${S.src}[${i}]`)), axes = shownAxes(axesAll);
   const fs = S.meta.stats.log_rate_hz, nyq = fs / 2;
   const key = [S.file, S.sub, S.src, S.mode, S.nper, S.range].join("|");
@@ -405,7 +464,7 @@ async function renderSpectro() {
   const [zmin, zmax] = S.clim || aut, fr = S.fr || [0, nyq];
   const nperOpts = [64, 128, 256, 512, 1024].map(n => `<option value="${n}" ${n === S.nper ? "selected" : ""}>${n} · Δf ${(fs / n).toFixed(1)} Hz · Δt ${(n / fs * 1000).toFixed(0)} ms</option>`).join("");
   $("controls").innerHTML = tbar(`<h3 data-tip="tab_spectro">Spectrogram</h3><span class="hint" data-tip="freq_nav">click a chart, then wheel = zoom frequency${S.mode === "time" ? " · ctrl+wheel = scroll through time · shift+wheel = zoom time" : ""} · drag = pan${S.mode === "throttle" ? " · empty rows = never flown at that throttle" : ""}</span>`, [
-    tg("Signal", seg("src", [["gyroUnfilt", "Gyro raw"], ["gyroADC", "Gyro filtered"], ["axisD", "D-term"]], S.src)),
+    tg("Signal", seg("src", [["gyroUnfilt", "Gyro raw"], ["gyroADC", "Gyro filtered"], ["axisP", "P-term"], ["axisI", "I-term"], ["axisD", "D-term"]].filter(([f]) => S.meta.fields.includes(`${f}[0]`)), S.src)),
     tg("Plot against", seg("mode", [["throttle", "Throttle"], ["time", "Time"]], S.mode)),
     tg("Axes", focusHTML()),
     tg("Frequency", `<label class="ctl"><input id="fmin" type="number" step="10" min="0" value="${Math.round(fr[0])}"> – <input id="fmax" type="number" step="10" value="${Math.round(fr[1])}"> Hz</label>
@@ -1095,7 +1154,7 @@ function setupPlayer() {
   if (typeof PB === "undefined" || !S.meta) return;
   const cfg = PLAYER_TABS[S.tab] || {};
   PB.hooks = {};
-  const noTime = ["summary", "plan", "compare"].includes(S.tab);   // pages without a time axis: no timeline
+  const noTime = ["summary", "plan", "compare", "delay"].includes(S.tab);   // pages without a time axis: no timeline
   $("dock").hidden = noTime;
   if (noTime) { PB.playing = false; unmountViewer(); document.querySelector(".maincard").classList.remove("split"); return; }
   mountPlayer();
@@ -1127,7 +1186,7 @@ function healthLive(d, t) {
   $("hq-cap").textContent = `t ${t.toFixed(1)} s · live`;
 }
 
-const RENDER = { compare: () => renderCompare(), plan: () => renderPlan(), pidsim: () => renderPidSim(), propwash: renderPropwash, summary: renderSummary, tracking: renderTS, pid: renderTS, motors: renderTS, noise: renderNoise, spectro: renderSpectro, step: renderStep, health: renderHealth };
+const RENDER = { delay: () => renderDelay(), compare: () => renderCompare(), plan: () => renderPlan(), pidsim: () => renderPidSim(), propwash: renderPropwash, summary: renderSummary, tracking: renderTS, pid: renderTS, motors: renderTS, noise: renderNoise, spectro: renderSpectro, step: renderStep, health: renderHealth };
 const render = () => {
   if (!S.meta) return;
   const dash = S.tab === "summary";
@@ -1139,7 +1198,7 @@ const render = () => {
   renderTips();
   return busy(() => RENDER[S.tab](), TAB_BUSY[S.tab] || "Analysing").then(() => { updateBadge(S.tab, S._flist); if (typeof PB !== "undefined") PB.dirty = true; fitSide(); }).catch(e => console.error(e));
 };
-const TAB_BUSY = { compare: "Comparing the two flights (all analyses, both logs)", plan: "Building the tune plan (all analyses)", summary: "Building the summary (all analyses)", tracking: "Loading flight traces", pid: "Analysing the PID terms", motors: "Analysing motor output",
+const TAB_BUSY = { delay: "Analysing the filter delay (learns this quad's dynamics the first time, ~15 s)", compare: "Comparing the two flights (all analyses, both logs)", plan: "Building the tune plan (all analyses)", summary: "Building the summary (all analyses)", tracking: "Loading flight traces", pid: "Analysing the PID terms", motors: "Analysing motor output",
   noise: "Analysing noise and filters", spectro: "Computing spectrograms", step: "Computing step responses", propwash: "Finding throttle chops",
   pidsim: "Preparing the PID simulator", health: "Checking motors and props" };
 const LVORD = { serious: 0, warning: 1, info: 2, good: 3 };

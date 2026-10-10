@@ -248,7 +248,7 @@ class Log:
         y, z, mh, cnt = self._spec(field, mode, sl, nper, bins)
         key = (mode, sl.start, sl.stop, nper)  # one auto colour scale per window & resolution: raw gyro, all axes
         if key not in self._clim:
-            v = np.concatenate([r[np.isfinite(r)] for r in (self._spec(f"gyroUnfilt[{i}]", mode, sl, nper, bins)[1] for i in range(3))])
+            v = np.concatenate([r[np.isfinite(r)] for r in (self._spec(f"gyroUnfilt[{i}]" if f"gyroUnfilt[{i}]" in self.cols else f"gyroADC[{i}]", mode, sl, nper, bins)[1] for i in range(3))])
             self._clim[key] = [round(float(np.percentile(v, 2)), 1), round(float(np.percentile(v, 99.0)), 1)] if v.size else None
         nn = lambda a: np.where(np.isfinite(a), np.round(a, 1), None).tolist()
         return {"y": np.round(y, 3).tolist(), "f": np.fft.rfftfreq(nper, 1 / self.fs).round(1).tolist(), "z": nn(z),
@@ -317,7 +317,7 @@ class Log:
         chans = {"t": blk(self.t)}
         for i in range(3):
             chans[f"gyro[{i}]"] = blk(c[f"gyroADC[{i}]"])
-            chans[f"gyroRaw[{i}]"] = blk(c[f"gyroUnfilt[{i}]"]) if f"gyroUnfilt[{i}]" in c else chans[f"gyro[{i}]"]
+            chans[f"gyroRaw[{i}]"] = blk(c.get(f"gyroUnfilt[{i}]", c[f"gyroADC[{i}]"])) if f"gyroUnfilt[{i}]" in c else chans[f"gyro[{i}]"]
             chans[f"acc[{i}]"] = blk(c[f"accSmooth[{i}]"]) / one_g if f"accSmooth[{i}]" in c else np.zeros(n) + (i == 2)
             chans[f"sp[{i}]"] = blk(c[f"setpoint[{i}]"])
         # physically scaled motion for the 3D viewer, integrated in the frequency domain at the full log rate:
@@ -326,7 +326,7 @@ class Log:
         #            gravity vector rotating with attitude live below that and would otherwise dominate)
         for i in range(3):
             chans[f"wob[{i}]"] = blk(_band_int(c[f"gyroADC[{i}]"] * np.pi / 180, self.fs, 3.0, 1))
-            chans[f"wobRaw[{i}]"] = blk(_band_int(c[f"gyroUnfilt[{i}]"] * np.pi / 180, self.fs, 3.0, 1)) if f"gyroUnfilt[{i}]" in c else chans[f"wob[{i}]"]
+            chans[f"wobRaw[{i}]"] = blk(_band_int(c.get(f"gyroUnfilt[{i}]", c[f"gyroADC[{i}]"]) * np.pi / 180, self.fs, 3.0, 1)) if f"gyroUnfilt[{i}]" in c else chans[f"wob[{i}]"]
             chans[f"disp[{i}]"] = blk(_band_int(c[f"accSmooth[{i}]"] / one_g * 9.81, self.fs, 8.0, 2)) if f"accSmooth[{i}]" in c else np.zeros(n)
         chans["thr"] = blk(c["throttle%"])
         nm = 0

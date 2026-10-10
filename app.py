@@ -32,7 +32,8 @@ class SafeJSON(Response):
         return json.dumps(clean(content), separators=(",", ":"), allow_nan=False).encode()
 
 
-app = FastAPI(title="BBX", default_response_class=SafeJSON)
+from version import VERSION
+app = FastAPI(title="BBX Analyzer", version=VERSION, default_response_class=SafeJSON)
 
 
 _lock = Lock()
@@ -57,6 +58,11 @@ def progress_(name: str, idx: int = 1):
     from bbl import PROGRESS
     d = PROGRESS.get(f"{Path(name).name}|{idx}", {})
     return {k: {**v, "elapsed": round(time.time() - v["t0"], 1)} for k, v in list(d.items())}
+
+
+@app.get("/api/version")
+def version_():
+    return {"version": VERSION}
 
 
 @app.get("/api/logs")
@@ -145,6 +151,16 @@ def simmodel(name: str, idx: int, prop: float = None, blades: int = None, auw: f
 def plan_(name: str, idx: int, prop: float = None, blades: int = None, auw: float = None):
     import plan
     return plan.build_plan(get(name, idx), prop, blades, auw)
+
+
+@app.get("/api/{name}/{idx}/delay")
+def delay_(name: str, idx: int, prop: float = None, blades: int = None):
+    """Filter-delay analysis: per-stage phase delay at each axis's crossover, margins with the learned plant, sweeps."""
+    import delay, plan
+    lg = get(name, idx)
+    noise = plan._memo(lg, ("noise", prop, blades), lambda: lg.noise(prop=prop, blades=blades))
+    pw = plan._memo(lg, ("propwash", prop, blades), lambda: lg.flight("propwash", prop=prop, blades=blades))
+    return plan._memo(lg, ("delay", prop, blades), lambda: delay.analyse(lg, lg.profile(prop, blades), lg.simmodel(prop, blades), noise, pw))
 
 
 @app.get("/api/{name}/{idx}/report")

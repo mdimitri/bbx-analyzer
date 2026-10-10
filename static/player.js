@@ -41,7 +41,8 @@ async function ensurePB() {
     d.accHP = [0, 1, 2].map(a => highpass(ch[`acc[${a}]`], Math.round(0.4 * n / d.dur)));
     d.disp = [0, 1, 2].map(a => ch[`disp[${a}]`]);
     d.pos = estimatePath(d);
-    PB.d = d; PB.key = key; PB.t = Math.min(PB.t, d.dur); PB.dirty = true; PB.loading = null;
+    const fresh = (PB.key || "").split("|")[0] !== String(key).split("|")[0];   // another log: start with the view at the start of the flight, not centred on t = 0
+    PB.d = d; PB.key = key; PB.t = fresh ? Math.min(d.dur, (PB.span || 10) / 2) : Math.min(PB.t, d.dur); PB.dirty = true; PB.loading = null;
     return d;
   })();
   return PB.loadingP;

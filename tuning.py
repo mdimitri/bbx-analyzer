@@ -58,9 +58,13 @@ def notch_q(center, cutoff):  # BF filterGetNotchQ
     return center * cutoff / (center ** 2 - cutoff ** 2)
 
 
-def dyn_cutoff(thr, lo, hi, expo):  # BF dynLpfCutoffFreq, thr 0..1
-    curve = thr * (1 - thr) * expo / 10 + thr
-    return (hi - lo) * curve + lo
+def dyn_cutoff(thr, lo, hi, expo):
+    """Dynamic low-pass cutoff at throttle thr (0..1), as Betaflight's dynLpfGyroUpdate / dynLpfDTermUpdate:
+    expo > 0 → dynLpfCutoffFreq (curve between min and max); expo = 0 → max(dynThrottle(thr)·max, min)."""
+    if expo > 0:
+        curve = thr * (1 - thr) * expo / 10 + thr
+        return (hi - lo) * curve + lo
+    return max(thr * (1 - thr * thr / 3) * 1.5 * hi, lo)
 
 
 def phase_delay_ms(H, f, at=100.0):
@@ -70,7 +74,9 @@ def phase_delay_ms(H, f, at=100.0):
 
 
 def filter_model(h, f, thr=0.3, motor_hz=None, dyn_peaks=(), scale=1.0):
-    """Return dict of stage name -> complex response on grid f. scale multiplies all LPF cutoffs (what-if)."""
+    """Return dict of stage name -> complex response on grid f. scale multiplies all LPF cutoffs (what-if).
+    Rates as in Betaflight (gyro_init.c): gyro LPF2 runs at the gyro sample rate (it is the downsampling filter);
+    gyro LPF1, the static and dynamic notches, the RPM filter and all D-term filters run at the PID loop rate."""
     fs_gyro = 1e6 / max(hnum(h, "looptime", 125)[0], 1)
     fs_pid = fs_gyro / max(hnum(h, "pid_process_denom", 1)[0], 1)
     st = {}
@@ -80,7 +86,7 @@ def filter_model(h, f, thr=0.3, motor_hz=None, dyn_peaks=(), scale=1.0):
     expo = hnum(h, "gyro_lpf1_dyn_expo", 5)[0]
     fc1 = dyn_cutoff(thr, dmin, dmax, expo) if dmin > 0 else hnum(h, "gyro_lpf1_static_hz")[0]
     if fc1 > 0:
-        st["gyro_lpf1"] = dict(H=lpf(f, fs_gyro, fc1 * scale, t1), label=f"Gyro LPF1 {LPF_TYPES.get(t1)} {fc1 * scale:.0f} Hz" + (" (dyn)" if dmin > 0 else ""), chain="gyro")
+        st["gyro_lpf1"] = dict(H=lpf(f, fs_pid, fc1 * scale, t1), label=f"Gyro LPF1 {LPF_TYPES.get(t1)} {fc1 * scale:.0f} Hz" + (" (dyn)" if dmin > 0 else ""), chain="gyro")
     fc2 = hnum(h, "gyro_lpf2_static_hz")[0]
     if fc2 > 0:
         t2 = int(hnum(h, "gyro_lpf2_type")[0])
@@ -89,7 +95,7 @@ def filter_model(h, f, thr=0.3, motor_hz=None, dyn_peaks=(), scale=1.0):
     H = np.ones_like(f, dtype=complex)
     for c, co in zip(hnum(h, "gyro_notch_hz"), hnum(h, "gyro_notch_cutoff")):
         if c > 0 and 0 < co < c:
-            H = H * notch(f, fs_gyro, c, notch_q(c, co))
+            H = H * notch(f, fs_pid, c, notch_q(c, co))
     if not np.allclose(H, 1):
         st["gyro_notch"] = dict(H=H, label="Gyro static notches", chain="gyro")
     # RPM filter: one notch per motor per harmonic (snapshot at median motor speed)
@@ -332,11 +338,15 @@ def noise_report(lg, t0=None, t1=None, res_prom=6.0, res_persist=40.0, res_mask=
     f = None
     for ax in range(3):
         a = {}
-        f, pr = welch(c[f"gyroUnfilt[{ax}]"][sl], fs, nper)
+        f, pr = welch(c[f"gyroUnfilt[{ax}]" if f"gyroUnfilt[{ax}]" in c else f"gyroADC[{ax}]"][sl], fs, nper)   # no raw gyro logged: raw = filtered
         if f is None:
             return {"error": "window too short for this resolution: select more flight time or a lower resolution"}
         _, pf = welch(c[f"gyroADC[{ax}]"][sl], fs, nper)
         a["raw"], a["filt"] = (10 * np.log10(pr + 1e-12)).round(2).tolist(), (10 * np.log10(pf + 1e-12)).round(2).tolist()
+        for k, key in (("axisP", "pterm"), ("axisI", "iterm")):   # what P and I put out, by frequency (Overlays in the Noise tab)
+            if f"{k}[{ax}]" in c:
+                _, pk = welch(c[f"{k}[{ax}]"][sl], fs, nper)
+                a[key] = (10 * np.log10(pk + 1e-12)).round(2).tolist()
         if f"axisD[{ax}]" in c:
             _, pd = welch(c[f"axisD[{ax}]"][sl], fs, nper)
             a["dterm"] = (10 * np.log10(pd + 1e-12)).round(2).tolist()
@@ -345,7 +355,7 @@ def noise_report(lg, t0=None, t1=None, res_prom=6.0, res_persist=40.0, res_mask=
         if ax < 2:
             rms_hf.append(band_rms(f, pf, 100, fs / 2)); rms_lf.append(band_rms(f, pf, 20, 100))
         if motors:
-            harm, fr, res = tracked_noise(c[f"gyroUnfilt[{ax}]"][sl], c[f"gyroADC[{ax}]"][sl], motors, fs,
+            harm, fr, res = tracked_noise(c.get(f"gyroUnfilt[{ax}]", c[f"gyroADC[{ax}]"])[sl], c[f"gyroADC[{ax}]"][sl], motors, fs,
                                           nh=max(int(hnum(h, "rpm_filter_harmonics", 3)[0]), 3))
             harm_all.append(harm)
             resid_peaks += [(fq, pr_, ax) for fq, pr_ in find_peaks(fr, res, prom=5.5, fmin=50)[:3]]
@@ -363,6 +373,7 @@ def noise_report(lg, t0=None, t1=None, res_prom=6.0, res_persist=40.0, res_mask=
         if len(dyn_est) < n_dyn and all(abs(p[0] - q) > 20 for q in dyn_est):
             dyn_est.append(p[0])
     st = filter_model(h, f, thr_mean, mot_med, dyn_est)
+    out["dyn_est"] = [round(float(x), 1) for x in dyn_est]
     out["filters"] = {k: dict(label=s["label"], chain=s["chain"], db=(20 * np.log10(np.abs(s["H"]) + 1e-9)).clip(-60, 6).round(2).tolist())
                       for k, s in st.items()}
     bands = []
@@ -723,7 +734,7 @@ def _resonances(lg, t0=None, t1=None, prom=6.0, persist=40.0, mask=4.0, nper=Non
     filt_att = {}
     bands_used = set()
     for ax in range(3):
-        raw = c[f"gyroUnfilt[{ax}]"][sl].astype(np.float64)
+        raw = c.get(f"gyroUnfilt[{ax}]", c[f"gyroADC[{ax}]"])[sl].astype(np.float64)
         X = raw[idx]
         P = np.abs(np.fft.rfft((X - X.mean(1, keepdims=True)) * w, axis=1)) ** 2
         P = np.where(msk, np.nan, P)
@@ -961,7 +972,7 @@ def filter_plan(lg, t0=None, t1=None, prof=None, res_kw=None):
     ax_out = {}
     f = None
     for ax in range(3):
-        f, pr = welch(c[f"gyroUnfilt[{ax}]"][sl], fs, nper)
+        f, pr = welch(c[f"gyroUnfilt[{ax}]" if f"gyroUnfilt[{ax}]" in c else f"gyroADC[{ax}]"][sl], fs, nper)   # no raw gyro logged: raw = filtered
         if f is None:
             return {"error": "Window too short."}
         _, pf = welch(c[f"gyroADC[{ax}]"][sl], fs, nper)
@@ -993,7 +1004,7 @@ def filter_plan(lg, t0=None, t1=None, prof=None, res_kw=None):
                                            "rpm_filter_harmonics", "rpm_filter_q", "rpm_filter_min_hz", "rpm_filter_fade_range_hz", "rpm_filter_weights")}
     def span_db(axis, thr_rng):
         """Raw spectrum averaged only over the throttle span where a resonance shows (it's diluted elsewhere)."""
-        x = c[f"gyroUnfilt[{axis}]"][sl].astype(float)
+        x = c.get(f"gyroUnfilt[{axis}]", c[f"gyroADC[{axis}]"])[sl].astype(float)
         ix = np.arange(0, len(x) - nper + 1, nper // 4)
         tm = np.array([thr[i:i + nper].mean() for i in ix])
         ix = ix[(tm >= thr_rng[0]) & (tm <= thr_rng[1])]

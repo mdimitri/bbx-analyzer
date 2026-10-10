@@ -39,27 +39,42 @@ def pids(h):
     return {a: dict(P=P[i][0], I=P[i][1], D=P[i][2], Dmax=max(dmax[i], P[i][2]), FF=ff[i]) for i, a in enumerate(AXN)}
 
 
-def filters(h, thr, motor_hz=None):
-    """Gyro and D-term filter chains as stage lists [{k: 'pt', order, fc} | {k: 'bq', type: 'lpf'|'notch', fc, q, w}]."""
+def filters(h, thr, motor_hz=None, dyn=()):
+    """Gyro and D-term filter chains as stage lists [{k: 'pt', order, fc} | {k: 'bq', type: 'lpf'|'notch', fc, q, w}],
+    in Betaflight's order: LPF1, LPF2, static notches, RPM notches, dynamic notches (at `dyn`, their estimated or
+    logged centres); D-term LPF1, LPF2, notch. All evaluated at the PID loop rate here (LPF2 really runs at the gyro
+    sample rate; the difference is negligible below a few hundred Hz)."""
+    from tuning import notch_q
     g, d = [], []
     t1 = int(hnum(h, "gyro_lpf1_type")[0]); lo, hi = (hnum(h, "gyro_lpf1_dyn_hz", 0) + [0])[:2]
     fc = dyn_cutoff(thr, lo, hi, hnum(h, "gyro_lpf1_dyn_expo", 5)[0]) if lo > 0 else hnum(h, "gyro_lpf1_static_hz")[0]
     if fc > 0: g.append(_lpf(t1, fc, "Gyro LPF1" + (" (dyn)" if lo > 0 else "")))
     fc = hnum(h, "gyro_lpf2_static_hz")[0]
     if fc > 0: g.append(_lpf(int(hnum(h, "gyro_lpf2_type")[0]), fc, "Gyro LPF2"))
+    for k, (c, co) in enumerate(zip(hnum(h, "gyro_notch_hz"), hnum(h, "gyro_notch_cutoff"))):
+        if c > 0 and 0 < co < c:
+            g.append(dict(k="bq", type="notch", fc=float(c), q=round(float(notch_q(c, co)), 3), w=1.0, label=f"Gyro notch {k + 1}"))
     nh = int(hnum(h, "rpm_filter_harmonics")[0])
     if nh and motor_hz and hnum(h, "dshot_bidir")[0]:
+        # Betaflight runs one notch per motor per harmonic (rpm_filter.c), each at that motor's own speed
         q = hnum(h, "rpm_filter_q", 500)[0] / 100
         w = (hnum(h, "rpm_filter_weights", 100) * 3)[:nh]
-        for k in range(1, nh + 1):
-            fk, wk = rpm_notch(h, motor_hz * k, w[k - 1] / 100)
-            if wk > 0:
-                g.append(dict(k="bq", type="notch", fc=round(fk, 1), q=q, w=round(wk, 3), label=f"RPM notch ×{k}"))
+        for mi, mhz_ in enumerate(motor_hz if isinstance(motor_hz, (list, tuple)) else [motor_hz]):
+            for k in range(1, nh + 1):
+                fk, wk = rpm_notch(h, mhz_ * k, w[k - 1] / 100)   # kept even when faded out (w = 0), so every segment has the same stages
+                g.append(dict(k="bq", type="notch", fc=round(fk, 1), q=q, w=round(wk, 3), label=f"RPM notch M{mi + 1} ×{k}"))
+    if dyn:
+        q = hnum(h, "dyn_notch_q", 300)[0] / 100
+        for k, c in enumerate(dyn):
+            g.append(dict(k="bq", type="notch", fc=round(float(c), 1), q=q, w=1.0, label=f"Dynamic notch {k + 1}"))
     t = int(hnum(h, "dterm_lpf1_type")[0]); lo, hi = (hnum(h, "dterm_lpf1_dyn_hz", 0) + [0])[:2]
     fc = dyn_cutoff(thr, lo, hi, hnum(h, "dterm_lpf1_dyn_expo", 5)[0]) if lo > 0 else hnum(h, "dterm_lpf1_static_hz")[0]
     if fc > 0: d.append(_lpf(t, fc, "D-term LPF1" + (" (dyn)" if lo > 0 else "")))
     fc = hnum(h, "dterm_lpf2_static_hz")[0]
     if fc > 0: d.append(_lpf(int(hnum(h, "dterm_lpf2_type")[0]), fc, "D-term LPF2"))
+    c, co = hnum(h, "dterm_notch_hz")[0], hnum(h, "dterm_notch_cutoff")[0]
+    if c > 0 and 0 < co < c:
+        d.append(dict(k="bq", type="notch", fc=float(c), q=round(float(notch_q(c, co)), 3), w=1.0, label="D-term notch"))
     return g, d
 
 
@@ -288,8 +303,9 @@ def closed_loop(lg, ax, seg, W, h, g, prm, kfac=None, tscale=None, state=False):
     F_log = (c[f"axisF[{ax}]"].astype(float)[idx] if f"axisF[{ax}]" in c else np.zeros_like(gy_real))[si]
     I0 = c[f"axisI[{ax}]"].astype(float)[sg][si]
     motor = [c[f"motorHz[{i}]"] for i in range(8) if f"motorHz[{i}]" in c]
-    mhz = np.array([np.mean([m[s:s + W].mean() for m in motor]) for s in seg]) if motor else None
-    gch = [filters(h, float(thr[k]), float(mhz[k]) if mhz is not None else None) for k in range(S)]
+    mseg = np.array([[m[s:s + W].mean() for m in motor] for s in seg]) if motor else None     # segments × motors
+    mhz = mseg.mean(1) if motor else None
+    gch = [filters(h, float(thr[k]), [float(x) for x in mseg[k]] if mseg is not None else None) for k in range(S)]
     # start state: the smoothed rate at the segment start (one raw sample carries tens of °/s of noise)
     graw = c[f"gyroUnfilt[{ax}]" if f"gyroUnfilt[{ax}]" in c else f"gyroADC[{ax}]"].astype(float)
     hw = max(1, int(0.004 * fs))
@@ -300,6 +316,8 @@ def closed_loop(lg, ax, seg, W, h, g, prm, kfac=None, tscale=None, state=False):
         out = []
         for q in range(n):
             st = dict(gch[0][j][q]); st["fc"] = np.array([gch[k][j][q]["fc"] for k in range(S)])[si]
+            if "w" in st:   # RPM-notch fade weight differs per segment (motor speed)
+                st["w"] = np.array([gch[k][j][q].get("w", 1.0) for k in range(S)])[si]
             out.append(Stage(st, fs, L, x0))
         return out
     G, Dch = bank(0), bank(1)
@@ -517,7 +535,7 @@ def identify(lg, ax, prof=None, nseg=32, win=1.0):
 
 
 # ---------------------------------------------------------------- report + per-craft memory
-MODEL_V = 2
+MODEL_V = 3   # 3: per-motor RPM notches + static/dynamic notches in the filter chain
 
 
 def _cache_path(lg):
@@ -581,8 +599,12 @@ def _model_report(lg, prof=None):
                inch=inch, axes={}, fit_hz=FIT_HZ, min_exc=MIN_EXC,
                motor=None if md is None else dict(tau_ms=round(md["tau"] * 1000, 1), delay_ms=round(md["d"] * 1000, 1), hz=round(md["hz"], 1),
                                                   coh=round(md["coh"], 2), err=round(md["err"], 4), band_hz=md["band_hz"]))
-    g_, d_ = filters(h, hover_thr, mhz)
-    out["filters"] = dict(gyro=g_, dterm=d_)
+    import delay
+    nz = next((v for k, v in getattr(lg, "_memo", {}).items() if k[0] == "noise" and isinstance(v, dict) and not v.get("error")), None)
+    dyn, dyn_src = delay.dyn_centres(lg, nz)
+    mot_med = [float(np.median(m[air])) for m in motor] if motor and air.any() else mhz
+    g_, d_ = filters(h, hover_thr, mot_med, dyn)
+    out["filters"] = dict(gyro=g_, dterm=d_, dyn_src=dyn_src)
     from bbl import progress
     for ax in range(3):
         progress(lg.path.name, lg.idx, "sim", f"Learning the {AXN[ax]} dynamics from your flight ({ax + 1}/3)", ax / 3)

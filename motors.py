@@ -65,7 +65,7 @@ def motor_report(lg, t0=None, t1=None, thr_min=0.0, thr_max=100.0):
     cmd = np.array([c[f"motor%[{i}]"][sl] for i in range(nm)], float)
     thr = c["throttle%"][sl]
     armed = thr > 0
-    g = np.array([c[f"gyroUnfilt[{a}]"][sl] for a in range(3)], float)
+    g = np.array([c.get(f"gyroUnfilt[{a}]", c[f"gyroADC[{a}]"])[sl] for a in range(3)], float)
     g -= np.array([np.convolve(x, np.ones(15) / 15, "same") for x in g])  # drop flight motion (< ~60 Hz)
     if g.shape[1] < fs * 3:
         return {"error": "Select at least 3 s."}

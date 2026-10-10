@@ -48,10 +48,10 @@ function planItems(P, st = planState()) {
     .concat([{ step: "pids", text: "Your PID-simulator gains", why: st.pids.label, cli: st.pids.cli, on: st.on["pids|Your PID-simulator gains"] ?? true, level: "info", tab: "pidsim", src: "you", user: "pids" }]);
   return items;
 }
-const TAB_LABEL = { summary: "Profile", tracking: "Tracking", pid: "PID terms", motors: "Motors", noise: "Noise", spectro: "Spectrogram", step: "Step response", propwash: "Propwash", pidsim: "PID simulator", health: "Motor health" };
+const TAB_LABEL = { delay: "Filter delay", summary: "Profile", tracking: "Tracking", pid: "PID terms", motors: "Motors", noise: "Noise", spectro: "Spectrogram", step: "Step response", propwash: "Propwash", pidsim: "PID simulator", health: "Motor health" };
 
 function planCli(P, items) {
-  const out = [`# BBX tune plan · ${P.craft || S.file} · ${new Date().toISOString().slice(0, 10)}`], seen = new Map();
+  const out = [`# BBX Analyzer v${BBX_VERSION} tune plan · ${P.craft || S.file} · ${new Date().toISOString().slice(0, 10)}`], seen = new Map();
   P.steps.forEach((s, si) => {
     const lines = [];
     items.filter(it => it.step === s.id && it.on && it.cli && it.cli.length).forEach(it => it.cli.forEach(([k, v]) => {

@@ -68,3 +68,23 @@ def test_api_endpoints(client):
     c = client.get("/api/compare", params={"a": "short.bbl", "b": "short.bbl"}).json()
     assert c["headline"] == "About the same"
     assert client.get("/api/nope.bbl/1/meta").status_code == 404
+
+
+def test_log_without_raw_gyro(tmp_path):
+    """gyroUnfilt is optional in Betaflight's blackbox fields: every analysis must still run (raw falls back to filtered)."""
+    import shutil
+    from bbl import Log
+    from conftest import DATA
+    p = tmp_path / "noraw.bbl"
+    shutil.copy(DATA / "short.bbl", p)
+    lg = Log(p, 1)
+    for i in range(3):
+        lg.cols.pop(f"gyroUnfilt[{i}]", None)
+    lg.__dict__.pop("_est", None); lg.__dict__.pop("_memo", None)
+    G = plan.gather(lg, 7.0, 2, None)
+    for k in ("noise", "step", "motors", "pid", "propwash", "fplan"):
+        assert not G[k].get("error"), f"{k}: {G[k].get('error')}"
+    assert lg.spectrogram("gyroADC[0]", "throttle")["z"]
+    assert lg.profile()["estimate"]
+    n = G["noise"]["axes"]["0"]
+    assert n["pterm"] and n["iterm"]          # P and I spectra for the Noise tab overlays

@@ -14,7 +14,7 @@
 </head>
 <body>
 <header class="bar">
-  <div class="brand"><img src="/static/brand/icon.svg" alt="" width="26" height="26"><span class="bn">bbx</span><small>analyzer</small></div>
+  <div class="brand"><img src="/static/brand/icon.svg" alt="" width="26" height="26"><span class="bn">bbx</span><small>analyzer</small><small class="ver" id="ver">v2</small></div>
   <select id="file" title="Log file"></select>
   <select id="sub" title="Sub-log"></select>
   <label class="btn">Upload<input id="up" type="file" accept=".bbl,.bfl,.txt" hidden></label>
@@ -48,6 +48,7 @@
       <button data-tab="pid" data-tip="tab_pid">PID terms</button>
       <button data-tab="motors" data-tip="tab_motors">Motors</button>
       <button data-tab="noise" data-tip="tab_noise">Noise</button>
+      <button data-tab="delay" data-tip="dly_tab">Filter delay</button>
       <button data-tab="spectro" data-tip="tab_spectro">Spectrogram</button>
       <button data-tab="step" data-tip="tab_step">Step response</button>
       <button data-tab="propwash" data-tip="tab_propwash">Propwash</button>
@@ -84,6 +85,7 @@
 <script src="/static/pidsim.js"></script>
 <script src="/static/planner.js"></script>
 <script src="/static/behaviour.js"></script>
+<script src="/static/delay.js"></script>
 <script src="/static/plan.js"></script>
 <script src="/static/compare.js"></script>
 <script src="/static/report.js"></script>
