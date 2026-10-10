@@ -406,10 +406,68 @@ def report_data(lg, prop=None, blades=None, auw=None):
         out["propwash"] = dict(events=[{k: e[k] for k in ("t", "ratio", "cls", "axis")} for e in (pw.get("events") or [])], axes=pw.get("axes"))
     if ok(mo) and mo.get("power"):
         out["power"] = {k: mo["power"].get(k) for k in ("total", "parts", "elec", "tw", "hover_cmd")}
+    if ok(st):
+        for i in range(3):
+            a = st.get(str(i)) or {}
+            out["step"]["axes"][str(i)].update(q25=a.get("q25"), q75=a.get("q75"), n=a.get("n"), reliability=a.get("reliability"))
+    if ok(pw):
+        out["propwash"].update(pw_freq=pw.get("pw_freq"), baseline=pw.get("baseline"), spec=pw.get("spec"))
+    if ok(mo):
+        out["motors"] = {k: mo.get(k) for k in ("motors", "pos", "cmd_offset", "rpm_dev", "cmd_mean", "steady_s")}
+        out["motors"]["vib_vs_speed"] = dict(bins=mo.get("speed_bins"), v=mo.get("vs_speed"))
+    if ok(pt):
+        out["pidterms"] = {a: dict(rms=v.get("rms"), sat_pct=v.get("sat_pct"), d_hf=v.get("d_hf"), p_hf=v.get("p_hf")) for a, v in (pt.get("axes") or {}).items()}
+    out["timeline"] = timeline(lg)
+    # noise by throttle: raw and filtered gyro, roll + pitch averaged in power, one shared colour scale
+    try:
+        out["spectro"] = {}
+        for kind, fld in (("raw", "gyroUnfilt"), ("filt", "gyroADC")):
+            sp = [lg.spectrogram(f"{fld}[{i}]" if f"{fld}[{i}]" in lg.cols else f"gyroADC[{i}]") for i in (0, 1)]
+            z = np.array([[np.nan if v is None else v for v in row] for row in sp[0]["z"]], float)
+            z2 = np.array([[np.nan if v is None else v for v in row] for row in sp[1]["z"]], float)
+            zz = 10 * np.log10((10 ** (z / 10) + 10 ** (z2 / 10)) / 2)
+            out["spectro"][kind] = dict(y=sp[0]["y"], f=sp[0]["f"], z=np.where(np.isfinite(zz), np.round(zz, 1), None).tolist(), motor_hz=sp[0]["motor_hz"])
+        out["spectro"]["clim"] = sp[0]["auto_clim"]
+    except Exception:
+        out.pop("spectro", None)
+    # the loop model: learned dynamics and the filter-delay analysis (cached after the first time)
+    try:
+        import delay
+        from bbl import Job
+        with Job(lg, "report", [("This quad's dynamics, learned from the flight", 8), ("Filter delay and margins", 2)]) as j:
+            j.step(0, "Loaded from the cache" if lg.sim_cached(prop, blades) else "Fitting authority, damping and the measured motor lag per axis", eta=0.3)
+            M = lg.simmodel(prop, blades, auw)
+            j.step(1, "Delay of each filter at the crossover, margins, reference comparison", eta=1.0)
+            D = _memo(lg, ("delay", prop, blades, "bf"), lambda: delay.analyse(lg, lg.profile(prop, blades), M, nz if ok(nz) else {}, pw if ok(pw) else None))
+        out["model"] = dict(motor=M.get("motor"), typical=M.get("typical"),
+                            axes={a: {k: r.get(k) for k in ("b", "tau_ms", "delay_ms", "a", "fit_pct", "status", "conf", "excited_hz", "lam")} for a, r in (M.get("axes") or {}).items()})
+        out["delay"] = dict(ref_label=D.get("ref_label"), inch=D.get("inch"), hover_thr=D.get("hover_thr"), check=D.get("check"),
+                            axes={a: dict(fc=A["fc"], margins=A["margins"], pm_range=A.get("pm_range"), p_ms=A["p_ms"], d_ms=A["d_ms"], p_typ=A["p_typ"], d_typ=A["d_typ"],
+                                          phase_used=A["phase_used"], timing=[{k: t[k] for k in ("key", "label", "ms")} for t in A["timing"]],
+                                          rows=[{k: r.get(k) for k in ("key", "label", "chain", "ms", "typ_ms", "ratio", "verdict")} for r in A["rows"]],
+                                          extra=[{k: e.get(k) for k in ("key", "label", "chain", "ms")} for e in A.get("extra_typical") or []],
+                                          headroom={k: v for k, v in A["headroom"].items() if k != "scale"}, d_off=A.get("d_off"))
+                                  for a, A in D["axes"].items()})
+        out["findings"]["delay"] = D.get("findings") or []
+    except Exception as e:
+        out["model_error"] = f"{type(e).__name__}: {e}"[:200]
     for k, d in (("noise", nz), ("step", st), ("health", mo), ("pid", pt), ("propwash", pw)):
         if ok(d):
             fl = d.get("findings") or []
             if k == "step":
                 fl = [f for i in range(3) for f in ((d.get(str(i)) or {}).get("findings") or [])]
             out["findings"][k] = fl
+    return out
+
+
+def timeline(lg, n=600):
+    """The whole flight in n bins: throttle, motor command range, rotation rate (max of |roll|, |pitch|, |yaw| per bin)."""
+    c, t = lg.cols, lg.t
+    idx = np.linspace(0, len(t), n + 1).astype(int)
+    mot = np.array([c[f"motor%[{i}]"] for i in range(8) if f"motor%[{i}]" in c]) if "motor%[0]" in c else None
+    rate = np.max(np.abs([c[f"gyroADC[{i}]"] for i in range(3)]), 0)
+    seg = lambda x, fn: [round(float(fn(x[a:b])), 1) if b > a else None for a, b in zip(idx[:-1], idx[1:])]
+    out = dict(t=[round(float(t[min(a, len(t) - 1)]), 2) for a in idx[:-1]], thr=seg(c["throttle%"], np.mean), rate=seg(rate, np.max))
+    if mot is not None:
+        out.update(mot_lo=seg(mot.min(0), np.min), mot_hi=seg(mot.max(0), np.max), mot=seg(mot.mean(0), np.mean))
     return out

@@ -77,3 +77,21 @@ def test_no_debug_fields_is_quiet():
     lg = FakeLog({"Firmware revision": "Betaflight 2025.12.0", "debug_mode": 0}, {"throttle%": np.zeros(10)})
     r = debugmodes.report(lg)
     assert r["mode"] is None and r["channels"] == []
+
+
+def test_dropout_detector_ignores_spin_down_but_catches_a_real_dropout(short_lg):
+    """A prop still spinning down after a chop is normal; speed collapsing while the command holds is a dropout."""
+    import numpy as np
+    import copy
+    lg = copy.copy(short_lg)
+    lg.cols = dict(short_lg.cols); lg._clim = {}
+    for k in ("_motordyn", "_memo"):
+        lg.__dict__.pop(k, None)
+    assert not [e for e in lg.motors()["events"] if not e["zero"]]          # this flight has none
+    c, fs = lg.cols, lg.fs
+    air = np.flatnonzero((c["throttle%"] > 20) & (c["motor%[0]"] > 25))
+    i0 = int(air[len(air) // 2]); n = int(0.05 * fs)
+    f = c["motorHz[0]"].copy(); f[i0:i0 + n] *= 0.3; c["motorHz[0]"] = f   # 50 ms at 30 % of its speed
+    lg.__dict__.pop("_motordyn", None)
+    ev = [e for e in lg.motors()["events"] if e["motor"] == 0]
+    assert ev and abs(ev[0]["t"] - lg.t[i0]) < 0.02

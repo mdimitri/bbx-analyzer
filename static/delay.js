@@ -222,7 +222,7 @@ function delayPanel(D, A, ai) {
     <p><b>Your dynamic notches</b>: ${esc(D.dyn.source)}${D.dyn.centres.length ? ` (${D.dyn.centres.join(", ")} Hz)` : ""}. <b>Motor noise</b> = your filtered-gyro spectrum through the PID and the changed filters (above 80 Hz, as % of motor range).</p></div></details>`;
   $("findings").innerHTML = `<div class="fh" data-tip="dly_pm">${AX[ai]} at a glance</div>
     <div class="dtiles">
-      ${tile("Phase margin", m.now.pm == null ? "–" : m.now.pm.toFixed(0) + "°", `${pmWord(m.now.pm)} · target 45°`, lv, "dly_pm")}
+      ${tile("Phase margin", m.now.pm == null ? "–" : m.now.pm.toFixed(0) + "°", `${pmWord(m.now.pm)} · target 45°${A.pm_range && A.pm_range[1] - A.pm_range[0] >= 1 ? ` · model range ${A.pm_range[0].toFixed(0)}–${A.pm_range[1].toFixed(0)}°` : ""}`, lv, "dly_pm")}
       ${tile("Without filters", m.none.pm == null ? "–" : m.none.pm.toFixed(0) + "°", "same quad, no filtering", "info", "dly_none")}
       ${tile(`With the reference filters`, m.typical.pm == null ? "–" : m.typical.pm.toFixed(0) + "°", `same quad, ${refL.toLowerCase()}`, pmLv(m.typical.pm), "dly_typ")}
       ${tile("Crossover", fc.toFixed(1) + " Hz", "where the loop gain is 1", "info", "dly_fc")}
@@ -235,7 +235,7 @@ function delayPanel(D, A, ai) {
       <tr><td>with your filters</td><td>${hTxt(H.now)}</td></tr><tr><td>with the reference filters</td><td>${hTxt(H.typical)}</td></tr><tr><td>without filters</td><td>${hTxt(H.none)}</td></tr></table>
     ${conf}
     <div class="hint">${exc ? `Your sticks excited this axis up to ${exc} Hz; at the ${fc.toFixed(0)} Hz crossover the model rests on the measured motor lag and ESC delay.` : ""}
-      ${ck.pred_motor_pct ? ` Model check: predicted PID noise ${ck.pred_motor_pct.toFixed(2)}% vs logged ${ck.meas_motor_pct.toFixed(2)}%.` : ""}${ck.pw_freq ? ` Propwash rings at ${ck.pw_freq} Hz; the model's peak is at ${(m.now.f_ms || 0).toFixed(0)} Hz.` : ""}</div>
+      ${ck.pred_motor_pct ? ` Model check: predicted PID noise ${ck.pred_motor_pct.toFixed(2)}% vs logged ${ck.meas_motor_pct.toFixed(2)}%.` : ""}${ck.pw_freq ? ` Propwash rings at ${ck.pw_freq} Hz; the model's peak is at ${(m.now.f_ms || 0).toFixed(0)} Hz.` : ""}${ck.calm && ck.calm[S.dlyAx] ? ` Calm flight: the strongest 10–40 Hz wobble is at ${ck.calm[S.dlyAx].f} Hz, ${ck.calm[S.dlyAx].rms} °/s (${ck.calm[S.dlyAx].prom_db >= 12 ? "<b>stands out: a self-sustained oscillation</b>" : "no self-sustained oscillation"}).` : ""}</div>
     ${findingsHTML(D.findings, `<div class="fh">Findings &amp; suggestions</div>`)}
     ${meth}`;
   $("findings").querySelectorAll(".dbr").forEach(tr => tr.onclick = () => {

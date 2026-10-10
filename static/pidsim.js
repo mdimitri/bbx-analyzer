@@ -42,7 +42,7 @@ function simAxis(ax, g, inp, o = {}) {
   const lim = C.limit[ax], ilim = C.iterm_limit || 400, lam = pl.lam || 0;
   const rcK = pt1k(C.rc_hz * PTC[3], fs), relK = pt1k(C.relax_hz, fs), yawK = ax === 2 && C.yaw_lp > 0 ? pt1k(C.yaw_lp, fs) : 1;
   const b1 = pt1k(85 * PTC[2], fs), b2 = pt1k(35 * PTC[2], fs), dgain = 0.00008 * C.dmax_gain / 35, sgain = 0.00008 * C.dmax_gain * C.dmax_adv / 100 / 35;
-  const dN = Math.max(0, Math.round(pl.delay_ms / 1000 * fs)), kt = 1 - Math.exp(-T / (pl.tau_ms / 1000)), trim = inp.trim || 0;
+  const dN = Math.max(0, Math.round(pl.delay_ms / 1000 * fs)), kt = 1 - Math.exp(-T / ((inp.tau_ms || pl.tau_ms) / 1000)), trim = inp.trim || 0;   // replay: the lag at that segment's motor speed
   // delay line: oldest first. From a log the PID sums just before the start fill it, otherwise the starting output
   const buf = new Float64Array(dN + 1).fill(inp.u0 ?? trim);
   if (inp.uhist && inp.uhist.length) { const fl = M.fs_log, uh = inp.uhist;
@@ -133,7 +133,7 @@ function replayInput(ax) {
   const v = SIMV.M.axes[SIMAX[ax]].val; if (!v) return null;
   const fs = SIMV.M.ctl.fs_pid, fl = SIMV.M.fs_log, n = Math.floor((v.sp.length - 1) / fl * fs), sp = new Float64Array(n);
   for (let k = 0; k < n; k++) { const x = k / fs * fl, i = x | 0; sp[k] = v.sp[i] + (v.sp[i + 1] - v.sp[i]) * (x - i); }
-  return { sp, smoothed: true, w0: v.gyro0, I0: v.I0, P0: v.P0, m0: v.m0, uhist: v.uhist, trim: v.trim, F: v.F, kp_mul: v.kp_mul, kd_mul: v.kd_mul };
+  return { sp, smoothed: true, w0: v.gyro0, I0: v.I0, P0: v.P0, m0: v.m0, uhist: v.uhist, trim: v.trim, F: v.F, kp_mul: v.kp_mul, kd_mul: v.kd_mul, tau_ms: v.tau_ms };
 }
 
 // ---------- metrics ----------
@@ -303,7 +303,9 @@ function simPanel() {
     if (p.status === "borrowed") return `<li>${AX[i]}: this flight barely moved it (stick std ${p.sp_std} °/s), so its dynamics come from <b>${p.source}</b>, the best-fitting flight of the same craft with matching motor dynamics.</li>`;
     if (p.status === "no_excitation") return `<li>${AX[i]}: this flight barely moved it (stick std ${p.sp_std} °/s) and no other flight of this craft has been analysed yet, so it uses the measured motor lag with a rough authority estimate. <b>Don't trust ${AX[i].toLowerCase()} predictions</b>: fly a few sharp ${AX[i].toLowerCase()} moves, or open another flight of this craft in the simulator first.</li>`;
     return p.excited_hz != null ? `<li>${AX[i]}: your sticks excited it up to ≈${p.excited_hz.toFixed(0)} Hz${p.frf_pct != null ? `, where the model matches the measured closed-loop response to ${p.frf_pct.toFixed(0)}%` : ""}.</li>` : ""; }).join("");
-  const mot = M.motor ? `Motor lag ${M.motor.tau_ms} ms and delay ${M.motor.delay_ms} ms measured from the motor commands vs. eRPM at ${M.motor.hz.toFixed(0)} Hz (${(M.motor.hz * 60).toFixed(0)} RPM, coherence ${M.motor.coh}); each axis may refine τ by ±30%.` : "No eRPM telemetry: motor lag is a prop-size estimate.";
+  const mot = M.motor ? `Motor lag ${M.motor.tau_ms} ms and delay ${M.motor.delay_ms} ms measured from the motor commands vs. eRPM at ${M.motor.hz.toFixed(0)} Hz (${(M.motor.hz * 60).toFixed(0)} RPM, coherence ${M.motor.coh}).
+    The lag shortens at higher motor speed${M.motor.law && M.motor.law.length > 1 ? ` (${M.motor.law.map(l => `${l[1].toFixed(0)} ms at ${l[0].toFixed(0)} Hz`).join(", ")})` : ""}: τ ∝ speed<sup>−${M.motor.k}</sup> (${M.motor.k_src}), applied to each part of the flight.
+    Each axis may refine it by at most ±${Math.round((M.motor.room || 0.15) * 100)}%: your stick inputs alone can't tell motor lag from authority, so left free it would wander from flight to flight.` : "No eRPM telemetry: motor lag is a prop-size estimate, fitted per axis (less certain).";
   const rows = SIMAX.map((a, i) => `<tr><td><span class="sw" style="background:${axc(i)}"></span>${AX[i]}</td>${keys.map(k => { const c = SIMV.cur[a][k], v = SIMV.gains[a][k];
     return `<td><input class="gin ${v !== c ? (v > c ? "up" : "down") : ""}" data-a="${a}" data-k="${k}" type="number" min="0" max="250" step="1" value="${Math.round(v)}"><small>${Math.round(c)}</small></td>`; }).join("")}</tr>`).join("");
   $("findings").innerHTML = `<div class="fh" data-tip="sim_model">Learned dynamics</div>

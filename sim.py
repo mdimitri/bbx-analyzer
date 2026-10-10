@@ -187,7 +187,7 @@ def motor_dynamics(lg, air=None):
     if band.sum() < 5:
         return None
     fb, Hb, wt = f[band], H[band], coh[band] / (1 - coh[band] + 0.05)
-    taus = np.exp(np.linspace(np.log(0.003), np.log(0.15), 70)); ds = np.arange(0, 0.012, 0.0005)
+    taus = np.exp(np.linspace(np.log(0.003), np.log(0.15), 200)); ds = np.arange(0, 0.012, 0.00025)   # ≈2% steps in τ
     T, D = np.meshgrid(taus, ds, indexing="ij")
     M = np.exp(-2j * np.pi * fb[None, None] * D[..., None]) / (1 + 2j * np.pi * fb[None, None] * T[..., None])
     G = np.real((wt * np.conj(M) * Hb).sum(-1)) / (wt * abs(M) ** 2).sum(-1)
@@ -433,7 +433,7 @@ def frf(lg, ax, seg, W, ys):
 RATE = {True: 8e-8, False: 6e-7}   # seconds per simulated lane-sample incl. scoring (compiled / numpy), refined as it runs
 
 
-def _search(lg, ax, seg, W, h, g, prm, kfac, tsc, max_lanes=3000):
+def _search(lg, ax, seg, W, h, g, prm, kfac, tsc, max_lanes=3000, keep=False):
     import time
     t_start = time.time()
     P, S = len(prm["b"]), len(seg)
@@ -460,6 +460,8 @@ def _search(lg, ax, seg, W, h, g, prm, kfac, tsc, max_lanes=3000):
     RATE[simcore.HAVE] = 0.5 * RATE[simcore.HAVE] + 0.5 * (time.time() - t_start) / max(P * S * W, 1)
     j = int(np.argmin(cost))
     fit = 100 * (1 - np.sqrt(np.clip(err[j] / var, 0, 4)))
+    if keep:
+        return dict(_cost=cost, cost=float(cost[j]), j=j)
     return dict(b=float(prm["b"][j]), tau=float(prm["tau"][j]), d=int(prm["d"][j]), a=float(prm["a"][j]), lam=float(prm["lam"][j]),
                 cost=float(cost[j]), fit_pct=round(float(np.median(fit)), 1), fit_seg=[round(float(x), 1) for x in fit],
                 frf_pct=round(float(100 * (1 - np.sqrt(min(4.0, jf[j])))), 1) if wt.sum() > 0 else None,
@@ -498,26 +500,53 @@ def tau_prior(inch):
     return 0.004 * inch + 0.017
 
 
+LAG_ROOM = 0.15   # the loop fit may move the measured motor lag by at most this fraction (it can't tell lag from authority)
+SPEED_K0 = 0.5    # motor lag ∝ speed^−k when a flight doesn't span enough motor speeds to measure k
+
+
 def _motor(lg):
+    """Motor + prop dynamics from command vs eRPM, plus how the lag changes with rotor speed: τ(f) = τ · (f_ref / f)^k,
+    k measured from the flight's slowest, middle and fastest thirds (a faster prop has more aerodynamic damping and the
+    motor more torque in reserve, so it settles quicker)."""
     if not hasattr(lg, "_motordyn"):
-        lg._motordyn = motor_dynamics(lg)
+        md = motor_dynamics(lg)
+        if md:
+            c = lg.cols
+            mh = np.mean([c[f"motorHz[{i}]"] for i in range(8) if f"motorHz[{i}]" in c], 0)
+            air = c["throttle%"] > 10
+            law = []
+            q = np.quantile(mh[air], [0, 1 / 3, 2 / 3, 1]) if air.sum() > 30 * lg.fs else []
+            for a, b in zip(q[:-1], q[1:]):
+                m = air & (mh >= a) & (mh <= b)
+                r = motor_dynamics(lg, m) if m.sum() > 10 * lg.fs else None
+                if r and r["coh"] > 0.6:
+                    law.append((float(np.median(mh[m])), r["tau"]))
+            # per-flight band estimates are noisy (low speeds come from descents and propwash, high ones from punches):
+            # only a clean, monotonic trend over a wide speed span is trusted, otherwise the typical exponent is used
+            k, src = SPEED_K0, "typical value"
+            if len(law) == 3 and law[-1][0] / law[0][0] > 1.3 and law[0][1] >= law[1][1] >= law[2][1]:
+                x, y = np.log([l[0] for l in law]), np.log([l[1] for l in law])
+                k, src = float(np.clip(-np.polyfit(x, y, 1)[0], 0.2, 1.0)), "measured on this flight"
+            md.update(k=k, k_src=src, law=[[round(f_, 1), round(t_ * 1000, 1)] for f_, t_ in law])
+        lg._motordyn = md
     return lg._motordyn
 
 
 def _tscale(lg, seg, W, md):
+    """Per-segment motor-lag multiplier from that segment's rotor speed: (f_ref / f)^k."""
     c = lg.cols
     motor = [c[f"motorHz[{i}]"] for i in range(8) if f"motorHz[{i}]" in c]
     if not (md and motor):
         return None
     mhz = np.array([np.mean([m[s:s + W].mean() for m in motor]) for s in seg])
-    return np.clip(md["hz"] / np.maximum(mhz, 1), 0.6, 1.6)
+    return np.clip((md["hz"] / np.maximum(mhz, 1)) ** md.get("k", SPEED_K0), 0.6, 1.6)
 
 
 def _grid_sizes(lg, ax, nseg, md):
     """Number of candidate plants in the coarse search and in each refinement (for the time estimate)."""
     nl = 5 if ax == 2 else 1
     nx = len(XD_MS)
-    return [10 * (3 if md else 4) * 3 * nl * nx, 7 * 3 * 3 * (3 if ax == 2 else 1) * (3 if nx > 1 else 1)] + [7 * 3 * 3 * (3 if ax == 2 else 1) * (3 if nx > 1 else 1)]
+    return [10 * (3 if md else 4) * 3 * nl * nx, 7 * 3 * 3 * (3 if ax == 2 else 1) * (3 if nx > 1 else 1), 7 * 3 * 3 * (3 if ax == 2 else 1) * (3 if nx > 1 else 1), 81]
 
 
 def expected_seconds(lg, nseg=32, win=1.0):
@@ -555,20 +584,38 @@ def identify(lg, ax, prof=None, nseg=32, win=1.0, cb=None):
     dn = int(round(d0 * fs))
     xds = [int(round(x * fs / 1000)) for x in XD_MS]
     lams = np.array([0.0, 0.4, 0.8, 1.2, 1.6]) if ax == 2 else np.array([0.0])
-    tsg = np.array([0.75, 1.0, 1.3]) if md else np.array([0.5, 0.8, 1.2, 1.8])
+    # with eRPM the motor lag is measured: the fit only gets ±LAG_ROOM around it (left free, it slides along a flat
+    # optimum, trading lag against authority, and lands anywhere between ~0.6× and ~1.8× from flight to flight)
+    tsg = np.array([1 - LAG_ROOM, 1.0, 1 + LAG_ROOM]) if md else np.array([0.5, 0.8, 1.2, 1.8])
     Gd = np.array(np.meshgrid(b0 * 2.0 ** np.linspace(-1.5, 3, 10), tsg, [0.0, 3.0, 8.0], lams, dn + np.array(xds), indexing="ij")).reshape(5, -1)
     cb(edges[0], f"coarse search · {Gd.shape[1]} candidate plants × {len(seg)} stick-active 1 s windows = {Gd.shape[1] * len(seg):,} closed-loop simulations",
        edges[1], eta(Gd.shape[1]))
     best = _search(lg, ax, seg, W, h, g, dict(b=Gd[0], tau=Gd[1] * tau0, d=Gd[4].astype(int), a=Gd[2], lam=Gd[3]), kfac, tsc)
     for it, sc in enumerate((0.5, 0.25)):
         lam_c = np.clip(best["lam"] + np.array([-0.2, 0, 0.2]) * (1 if it == 0 else 0.5), 0, 2.5) if ax == 2 else np.array([0.0])
-        tl = np.clip(best["tau"] * 2.0 ** (np.array([-1, 0, 1]) * sc * 0.6), 0.6 * tau0, 2.0 * tau0) if md else best["tau"] * 2.0 ** (np.array([-1, 0, 1]) * sc * 0.6)
+        tl = (np.clip(best["tau"] * (1 + np.array([-1, 0, 1]) * LAG_ROOM * sc), (1 - LAG_ROOM) * tau0, (1 + LAG_ROOM) * tau0) if md
+              else best["tau"] * 2.0 ** (np.array([-1, 0, 1]) * sc * 0.6))
         dd = np.unique(np.clip(best["d"] + np.array([-1, 0, 1]) * max(1, int(round(fs / 1000 * (1.5 if it == 0 else 0.5)))), dn, dn + int(0.02 * fs))) if len(xds) > 1 else np.array([best["d"]])
         Gd = np.array(np.meshgrid(best["b"] * 2.0 ** (np.linspace(-1, 1, 7) * sc), np.unique(tl),
                                   np.unique(np.clip(best["a"] + np.array([-1, 0, 1]) * (4 if it == 0 else 2), 0, 40)), lam_c, dd, indexing="ij")).reshape(5, -1)
         cb(edges[1 + it], f"refining ({it + 1}/2) around authority {best['b']:.0f}, motor lag {best['tau'] * 1000:.0f} ms · {Gd.shape[1]} candidates × {len(seg)} windows"
            f" · fit so far {best['fit_pct']:.0f}%", edges[2 + it], eta(Gd.shape[1]))
         best = _search(lg, ax, seg, W, h, g, dict(b=Gd[0], tau=Gd[1], d=Gd[4].astype(int), a=Gd[2], lam=Gd[3]), kfac, tsc)
+    # equally plausible plants at the ends of the allowed lag range (authority and damping refitted for each): the
+    # spread of the phase margin over these is how sure the model can be at the crossover
+    lo_, hi_ = ((1 - LAG_ROOM) * tau0, (1 + LAG_ROOM) * tau0) if md else (best["tau"] / 1.6, best["tau"] * 1.6)
+    taus = np.array([lo_, best["tau"], hi_])
+    Bv = best["b"] * 2.0 ** np.linspace(-0.6, 0.6, 9); Av = np.unique(np.clip(best["a"] + np.array([-3.0, 0, 3.0]), 0, 40))
+    Ga = np.array(np.meshgrid(taus, Bv, Av, indexing="ij")).reshape(3, -1)
+    na = Ga.shape[1]
+    cb(edges[3], f"how sure: refitting authority and damping with the motor lag at {lo_ * 1000:.0f} and {hi_ * 1000:.0f} ms ({na} candidates)", edges[4], eta(na))
+    alt = _search(lg, ax, seg, W, h, g, dict(b=Ga[1], tau=Ga[0], d=np.full(na, best["d"]), a=Ga[2], lam=np.full(na, best["lam"])), kfac, tsc, keep=True)
+    best["alt"] = []
+    for t_ in taus:
+        m_ = np.isclose(Ga[0], t_)
+        j_ = int(np.flatnonzero(m_)[np.argmin(alt["_cost"][m_])])
+        best["alt"].append(dict(tau=float(t_), tau_ms=round(float(t_) * 1000, 1), b=float(Ga[1][j_]), a=float(Ga[2][j_]),
+                                cost_rel=round(float(alt["_cost"][j_] / max(best["cost"], 1e-12)), 3)))
     # how far up the sticks really excited this axis: highest frequency below which the setpoint → gyro coherence stays
     # ≥ 0.5 (allowing one dip). Margins at a crossover above this are extrapolated from the measured motor lag.
     fr = best.get("frf") or {}
@@ -586,7 +633,7 @@ def identify(lg, ax, prof=None, nseg=32, win=1.0, cb=None):
 
 
 # ---------------------------------------------------------------- report + per-craft memory
-MODEL_V = 3   # 3: per-motor RPM notches + static/dynamic notches in the filter chain
+MODEL_V = 4   # 3: per-motor RPM notches + static/dynamic notches in the filter chain; 4: motor lag pinned to eRPM (±15%), speed law
 _CODE = None
 
 
@@ -669,6 +716,7 @@ def _model_report(lg, prof=None):
     out = dict(fs_log=round(fs), pids=pids(h), ctl=controller(h, hover_thr), hover_thr=round(hover_thr * 100, 1), motor_hz=None if mhz is None else round(mhz, 1),
                inch=inch, axes={}, fit_hz=FIT_HZ, min_exc=MIN_EXC,
                motor=None if md is None else dict(tau_ms=round(md["tau"] * 1000, 1), delay_ms=round(md["d"] * 1000, 1), hz=round(md["hz"], 1),
+                                                  k=round(md.get("k", SPEED_K0), 2), k_src=md.get("k_src", "assumed"), law=md.get("law"), room=LAG_ROOM,
                                                   coh=round(md["coh"], 2), err=round(md["err"], 4), band_hz=md["band_hz"]))
     import delay
     nz = next((v for k, v in getattr(lg, "_memo", {}).items() if k[0] == "noise" and isinstance(v, dict) and not v.get("error")), None)
@@ -708,14 +756,16 @@ def _model_report(lg, prof=None):
             g = pids(h)[AXN[ax]]
             prm = {k: np.array([r[k]]) for k in ("b", "a", "tau", "d", "lam")}
             kf = gain_factors(lg, ax, [s], W, h, g)
-            sim, real, si, st = closed_loop(lg, ax, [s], W, h, g, prm, kf, _tscale(lg, [s], W, md), state=True)
+            ts1 = _tscale(lg, [s], W, md)
+            sim, real, si, st = closed_loop(lg, ax, [s], W, h, g, prm, kf, ts1, state=True)
             err, var = _score(sim, real, si, 1, 1, fs)
             r["val"] = dict(t0=round(float(lg.t[s]), 3), sp=c[f"setpoint[{ax}]"][sl].round(1).tolist(), gyro=c[f"gyroADC[{ax}]"][sl].round(1).tolist(),
                             F=(c[f"axisF[{ax}]"][sl].round(2).tolist() if f"axisF[{ax}]" in c else None),
                             gyro0=round(float(st["x0"][0]), 2), I0=float(c[f"axisI[{ax}]"][s]), P0=float(c[f"axisP[{ax}]"][s]),
                             m0=round(float(st["m0"][0]), 3), uhist=np.round(st["uhist"][0], 2).tolist(), trim=round(float(st["trim"][0]), 3),
                             kp_mul=round(float(kf[0][0]), 3), kd_mul=round(float(kf[1][0]), 3), thr=round(float(thr[sl].mean()), 1),
-                            fit=round(float(100 * (1 - np.sqrt(min(4.0, err[0, 0] / var[0])))), 1), sp_std=round(float(np.std(c[f"setpoint[{ax}]"][sl])), 1))
+                            fit=round(float(100 * (1 - np.sqrt(min(4.0, err[0, 0] / var[0])))), 1), sp_std=round(float(np.std(c[f"setpoint[{ax}]"][sl])), 1),
+                            tau_ms=round(float(r["tau"] * (ts1[0] if ts1 is not None else 1.0)) * 1000, 2))
         j.sub(0.9, f"{AXN[ax].capitalize()} · checking the model: replaying your sticks through it, step response like-for-like", 1.0, 0.5)
         r["step_ll"] = step_like_for_like(lg, ax, r) if r["status"] == "ok" else None
         j.note(f"fit {r['fit_pct']:.0f}% · lag {r['tau_ms']:.0f} ms · delay {r['delay_ms']:.1f} ms" if r.get("fit_pct") is not None

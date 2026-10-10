@@ -465,6 +465,15 @@ def analyse(lg, prof, M, noise, pw=None, ref="bf", prog=None):
         fc = m["fc"] or m0["fc"]
         if not fc:
             continue
+        # how sure: the same analysis on the equally plausible plants at the ends of the allowed motor-lag range
+        rng = []
+        for al in pl.get("alt") or []:
+            if al.get("cost_rel", 9) <= 1.15:
+                ma = margins(loop(h, S, dict(pl, tau_ms=al["tau_ms"], b=al["b"], a=al["a"]), g, ax, f, km, kd)[0], f)
+                mt_a = margins(loop(Ht, St, dict(pl, tau_ms=al["tau_ms"], b=al["b"], a=al["a"]), g, ax, f, km, kd)[0], f)
+                if ma["pm"] is not None:
+                    rng.append(dict(tau_ms=al["tau_ms"], pm=round(ma["pm"], 1), fc=round(ma["fc"], 1), pm_typ=None if mt_a["pm"] is None else round(mt_a["pm"], 1)))
+        pm_rng = [min(x["pm"] for x in rng + [dict(pm=m["pm"])]), max(x["pm"] for x in rng + [dict(pm=m["pm"])])] if rng and m["pm"] is not None else None
         # per-stage phase delay at the crossover, and its typical counterpart
         rows = []
         S15, S80 = stages(h, 0.15, mot_med, dyn), stages(h, 0.8, mot_med, dyn)
@@ -570,17 +579,44 @@ def analyse(lg, prof, M, noise, pw=None, ref="bf", prog=None):
                               phase_used=round(used, 2), phase_spare=round(spare, 2), share=None if share is None else round(share, 3),
                               thr=dict(t=(thr_axis * 100).round(1).tolist(), p=pd_thr, d=dd_thr), mults=mults.round(3).tolist(), sweep=sweep, headroom=head,
                               noise_pct=None if nz_now is None else round(nz_now, 3), noise_meas=None if nz_meas is None else round(nz_meas, 3), excited_hz=pl.get("excited_hz"), status=pl.get("status"), conf=pl.get("conf"),
-                              gains=dict(P=g["P"], I=g["I"], D=g["D"], kp_mul=km, kd_mul=kd), d_off=d_off)
+                              gains=dict(P=g["P"], I=g["I"], D=g["D"], kp_mul=km, kd_mul=kd), d_off=d_off,
+                              pm_range=None if pm_rng is None else [round(x, 1) for x in pm_rng], alt=rng, lag_src=(M.get("motor") or {}).get("k_src") and "eRPM" or "estimate")
     # model check: predicted vs measured motor noise above 80 Hz (all axes add at each motor)
     pv = [(out["axes"][a]["noise_pct"], out["axes"][a]["noise_meas"]) for a in out["axes"] if out["axes"][a]["noise_pct"] is not None and out["axes"][a]["noise_meas"]]
     out["check"] = dict(pred_motor_pct=round(float(np.sqrt(sum(p * p for p, _ in pv))), 3) if pv else None,
                         meas_motor_pct=round(float(np.sqrt(sum(m * m for _, m in pv))), 3) if pv else None,
                         axes={a: dict(pred=out["axes"][a]["noise_pct"], meas=out["axes"][a]["noise_meas"]) for a in out["axes"]})
+    # empirical cross-check 2: a loop with (almost) no margin oscillates on its own near the crossover, which shows as a
+    # peak in the tracking error during calm flight (sticks near centre). Measured, not modelled.
+    out["check"]["calm"] = calm_oscillation(lg)
     # empirical cross-check: a lightly damped loop rings near its sensitivity peak; propwash excites exactly that
     if isinstance(pw, dict) and pw.get("pw_freq"):
         out["check"]["pw_freq"] = pw["pw_freq"]
         out["check"]["model_peak"] = {a: out["axes"][a]["margins"]["now"].get("f_ms") for a in out["axes"]}
     out["findings"] = findings(out, h, prof)
+    return out
+
+
+def calm_oscillation(lg):
+    """Per axis: the strongest 10–40 Hz component of the tracking error (gyro − setpoint) while the sticks are near centre
+    in the air: frequency, RMS in the band (°/s) and how far it stands above the band's median level (dB)."""
+    from tuning import welch
+    c, fs = lg.cols, lg.fs
+    air = c["throttle%"] > 10
+    out = {}
+    for ax, a in enumerate(AXN[:2]):
+        sp, gy = c[f"setpoint[{ax}]"].astype(float), c[f"gyroADC[{ax}]"].astype(float)
+        calm = air & (np.abs(sp) < 15)
+        if calm.sum() < 10 * fs:
+            continue
+        f, P = welch((gy - sp)[calm], fs, int(2 ** round(np.log2(fs))))
+        if f is None:
+            continue
+        band = (f >= 10) & (f <= 40)       # below ~10 Hz the error is the pilot, wind and propwash, not the loop
+        i = int(np.argmax(P[band])); fb, Pb = f[band], P[band]
+        trap = getattr(np, "trapezoid", None) or np.trapz
+        out[a] = dict(f=round(float(fb[i]), 1), rms=round(float(np.sqrt(trap(Pb, fb))), 2),
+                      prom_db=round(float(10 * np.log10(Pb[i] / max(np.median(Pb), 1e-12))), 1))
     return out
 
 
@@ -639,7 +675,9 @@ def findings(D, h, prof):
         else:
             why = f"Without filtering it would have {m0['pm']:.0f}°; the filters use {min(used / spare, 9.99) * 100:.0f}% of the phase the loop can spare above the 45° target."
         cmp_t = "" if mt["pm"] is None else f" With the reference filters ({D['ref_label'].lower()}) it would be {mt['pm']:.0f}°."
-        F.append(finding(lvl, f"{a.capitalize()}: {m['pm']:.0f}° phase margin at the {fc:.0f} Hz crossover, the filters take {used:.0f}° of it",
+        pr = A.get("pm_range")
+        rtxt = f" (model range {pr[0]:.0f}–{pr[1]:.0f}°)" if pr and pr[1] - pr[0] >= 1 else ""
+        F.append(finding(lvl, f"{a.capitalize()}: {m['pm']:.0f}° phase margin{rtxt} at the {fc:.0f} Hz crossover, the filters take {used:.0f}° of it",
                          why,
                          f"The crossover is where the loop gain is 1; the phase left there decides how well the quad damps a kick (45° is the usual target, "
                          f"below ~30° it rings). At {fc:.0f} Hz the filters delay what the PID sees by {A['p_ms']:.2f} ms on the P path and "
@@ -710,6 +748,20 @@ def findings(D, h, prof):
                              "A loop with little phase margin rings near its sensitivity peak, and propwash is what excites it.",
                              "Measured in the Propwash tab (the frequency of the wobble after throttle chops) vs. predicted by this model. Close values mean the "
                              "margins on this tab describe the real quad; a big gap means take them as indicative.", "", ""))
+    for a, o in (ck.get("calm") or {}).items():
+        A = D["axes"].get(a)
+        if not A or o["prom_db"] < 12 or o["rms"] < 2:
+            continue
+        m = A["margins"]["now"]
+        near = m.get("fc") and 0.6 < o["f"] / m["fc"] < 1.6
+        F.append(finding("serious" if (m["pm"] or 99) < 15 else "warning", f"{a.capitalize()} oscillates on its own at {o['f']:.0f} Hz in calm flight ({o['rms']:.1f} °/s)",
+                         ("That is next to the loop's crossover (" + f"{m['fc']:.0f} Hz) and the model gives only {m['pm']:.0f}° of margin: the measurement and the model agree "
+                          "that this axis is at the edge of stability.") if near else
+                         "A wobble that stands out of the tracking error while the sticks are centred, not caused by the pilot.",
+                         f"Measured from the logged gyro minus setpoint with the sticks within ±15 °/s of centre: the {o['f']:.0f} Hz peak stands "
+                         f"{o['prom_db']:.0f} dB above the rest of the 10–40 Hz band. Motor saturation keeps a real quad's oscillation bounded, so it "
+                         "flies, but it shakes, heats motors and blurs footage.",
+                         "Lower P and D on this axis (or lighten the filters, see the blocks above), fly, and check this line disappears.", ""))
     if ck.get("pred_motor_pct") and ck.get("meas_motor_pct"):
         r = ck["pred_motor_pct"] / ck["meas_motor_pct"]
         det = ", ".join(f"{k} {v['pred']:.2f}/{v['meas']:.2f}%" for k, v in (ck.get("axes") or {}).items() if v.get("pred") is not None and v.get("meas"))

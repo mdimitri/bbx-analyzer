@@ -54,6 +54,17 @@ def _relative(A, fm, bw=10.0):
     return [float(np.exp(np.mean(np.log(r)))) if r else None for r in ratios]
 
 
+def _lag(x, k):
+    """First-order lag s += k·(x − s), compiled when numba is there."""
+    import simcore
+    if simcore.HAVE:
+        return simcore.pt_run(x, float(k), 1)
+    y = np.empty_like(x); s_ = x[0]
+    for i, v in enumerate(x):
+        s_ += k * (v - s_); y[i] = s_
+    return y
+
+
 def motor_report(lg, t0=None, t1=None, thr_min=0.0, thr_max=100.0):
     c, h, sl, fs = lg.cols, lg.headers, lg.window(t0, t1), lg.fs
     nm = sum(f"motorHz[{i}]" in c for i in range(8))
@@ -142,22 +153,48 @@ def motor_report(lg, t0=None, t1=None, thr_min=0.0, thr_max=100.0):
                 rr[m].append(med[m] / med.mean())
     out["rpm_dev"] = [round((float(np.mean(r)) - 1) * 100, 2) if r else None for r in rr]
 
-    # ---- desync / eRPM dropouts: the speed collapses within 30 ms while the command holds or rises. Spin-up lag can't trigger
-    # this (speed rises then), and neither can braking (the command falls first). A reading of exactly 0 for a few ms with
-    # the motor back at speed right after is a telemetry glitch, not the motor.
+    # ---- desync / eRPM dropouts: the measured speed falls far below what the command predicts. The prediction runs the
+    # command through the motor dynamics measured on this flight (delay + first-order lag, sim.motor_dynamics) and the
+    # flight's own command → speed map, so a prop still spinning down after a chop, or speed swings that lag the command
+    # in an oscillation, are expected behaviour, not dropouts. A reading of exactly 0 for a few ms with the motor back at
+    # speed right after is a telemetry glitch, not the motor.
     ev = []
-    Wd = max(2, int(0.03 * fs))
+    try:
+        import sim
+        md = sim._motor(lg)
+    except Exception:
+        md = None
+    tau = md["tau"] if md else 0.04
+    dly = int(round((md["d"] if md else 0.002) * fs))
+    k_ = 1 - np.exp(-1 / (tau * fs))
+    lagc = np.empty_like(cmd)
     for m in range(nm):
-        cs = np.convolve(cmd[m], np.ones(max(3, int(0.02 * fs))) / max(3, int(0.02 * fs)), "same")
-        fb, cb = np.r_[np.full(Wd, np.nan), f[m, :-Wd]], np.r_[np.full(Wd, np.nan), cs[:-Wd]]
-        bad = armed & (cs > 25) & (fb > 30) & (f[m] < 0.6 * fb) & (cs >= cb - 2)
-        e_ = np.flatnonzero(np.diff(np.r_[0, bad.astype(int), 0]))
-        for s0, s1 in zip(e_[::2], e_[1::2]):
-            ref = fb[s0]
-            k1 = s0 + int(np.argmax(np.r_[f[m, s0:s0 + int(0.3 * fs)], [np.inf]] >= 0.8 * ref))
-            seg = f[m, s0:max(k1, s1)]
-            ev.append(dict(motor=m, t=round(float(lg.t[sl][s0]), 2), ms=round(float(max(k1 - s0, s1 - s0) / fs * 1000), 1),
-                           zero=bool(len(seg) and (seg == 0).any() and (k1 - s0) / fs < 0.01), cmd=round(float(cs[s0]), 1), hz=round(float(ref), 1)))
+        x = np.r_[np.full(dly, cmd[m, 0]), cmd[m, :len(cmd[m]) - dly]] if dly else cmd[m]
+        lagc[m] = _lag(np.ascontiguousarray(x, float), k_)
+    # command → speed map from the whole flight (all motors pooled), median per 1 % of lagged command
+    ok_ = armed[None, :] & (f > 0)
+    bins = np.clip(np.round(lagc[ok_]).astype(int), 0, 100)
+    sp_ = f[ok_]
+    med = np.full(101, np.nan)
+    for b in np.unique(bins):
+        sel = bins == b
+        if sel.sum() >= 20:
+            med[b] = np.median(sp_[sel])
+    good = np.isfinite(med)
+    if good.sum() >= 5:
+        med = np.interp(np.arange(101), np.flatnonzero(good), med[good])
+        Wd = max(2, int(0.005 * fs))       # must persist ≥ 5 ms
+        for m in range(nm):
+            pred = med[np.clip(np.round(lagc[m]).astype(int), 0, 100)]
+            bad = armed & (cmd[m] > 20) & (pred > 40) & (f[m] < 0.6 * pred)
+            e_ = np.flatnonzero(np.diff(np.r_[0, bad.astype(int), 0]))
+            for s0, s1 in zip(e_[::2], e_[1::2]):
+                if s1 - s0 < Wd:
+                    continue
+                seg = f[m, s0:s1]
+                ev.append(dict(motor=m, t=round(float(lg.t[sl][s0]), 2), ms=round(float((s1 - s0) / fs * 1000), 1),
+                               zero=bool(len(seg) and (seg == 0).any() and (s1 - s0) / fs < 0.01), cmd=round(float(cmd[m, s0]), 1),
+                               hz=round(float(pred[s0]), 1), got=round(float(f[m, s0:s1].min()), 1)))
     out["events"] = ev
 
     # ---------- diagnosis ----------
@@ -276,7 +313,8 @@ def motor_report(lg, t0=None, t1=None, thr_min=0.0, thr_max=100.0):
             tele = all(e["zero"] for e in es)
             F.append(finding("info" if tele else "serious" if len(es) > 2 else "warning", f"{lab(m)}: {len(es)} RPM dropout(s)" + (" (telemetry)" if tele else ""),
                              "The speed reading briefly dropped to 0: a reporting glitch, not a real problem." if tele else "The motor lost speed while it was being asked to keep spinning: possible desync.",
-                             "At " + ", ".join(f"{e['t']} s ({e['hz']:.0f} Hz → below 60% within 30 ms, command {e['cmd']:.0f}% and not falling, recovered after {e['ms']:.0f} ms)" for e in es[:4]) + ".",
+                             "At " + ", ".join(f"{e['t']} s (expected ≈{e['hz']:.0f} Hz from the command, measured down to {e.get('got', 0):.0f} Hz for {e['ms']:.0f} ms, command {e['cmd']:.0f}%)" for e in es[:4])
+                             + ". 'Expected' runs the command through this motor's measured lag and the flight's own command → speed map, so normal spin-down after a chop doesn't count.",
                              "Harmless if rare. If frequent, check the ESC signal wire and ground." if tele else
                              "A desync is when the ESC loses track of the motor position and the motor stutters. Check motor wires and solder joints, and the motor for damage. Try higher motor timing or a lower DShot rate, and update the ESC firmware.",
                              "" if tele else "Desyncs can cause crashes: don't ignore them."))
