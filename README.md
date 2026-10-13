@@ -2,7 +2,7 @@
 
 **BBX Analyzer** reads your Betaflight blackbox logs and tells you, in plain words, what is going on with your quad and what to try next. It covers noise and filters, frame resonances, the tune, propwash, and motor and prop health. Every finding comes from your own log, and each fix comes with the CLI lines.
 
-It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 2.0** ([what's new](CHANGELOG.md)).
+It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 2.4** ([what's new](CHANGELOG.md)).
 
 ---
 
@@ -29,6 +29,10 @@ After the first start you also get a **BBX Analyzer** shortcut with its icon: on
 ## What it finds that the classic tools don't
 
 If you know Blackbox Explorer or PIDtoolbox, you already have traces, spectra, spectrograms and step responses. BBX has those too, and adds the parts that answer *"so what do I change?"*:
+
+- 🛸 **Something to look at while you wait.** With no log open, a quad flies freestyle lines and tricks, in wind, around a procedural wireframe toy town (street grid, parks, ring road, districts and forest) of 100 kinds of houses, towers, trees, ramps, gates and cars, and flies for ever without a cut, with a live view of the pilot's sticks and motor, PID and spectrogram plots drawn like the analyzer's own.
+
+![The splash screen: the quad in its toy world](docs/img/splash.png)
 
 - 🗺️ **One tune plan.** Every suggestion from every analysis, in the order to apply it (logging → mechanical → filters → PIDs → feedforward), with conflicts resolved and one CLI block to paste. Tick what you want; choices from the filter planner or the PID simulator can replace the automatic proposal.
 - ⏱️ **Filter delay, explained.** Every filter's delay at the loop's crossover frequency as stacked bars, next to Betaflight's firmware defaults (checked against the Betaflight source) or those defaults scaled for your prop size. Hover a filter for its settings next to the reference's, why it delays that much, and the exact phase margin after each possible change, with the CLI lines. Also: phase margin with and without filters, how far P and D could go, and what lighter or heavier filtering would cost in motor noise.

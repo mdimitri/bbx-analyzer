@@ -98,17 +98,25 @@ def _server():
     proc.kill(); raise RuntimeError("server didn't start")
 
 
+GL_ARGS = ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"]
+
+
+async def shot_splash(pg):
+    await pg.screenshot(path=str(IMG / "splash.png")); print("  ✓ splash.png")
+
+
 async def _shots(port):
     from playwright.async_api import async_playwright
     base = f"http://127.0.0.1:{port}"
     craft = json.loads(urllib.request.urlopen(f"{base}/api/{DEMO_LOG}/1/meta").read())["headers"].get("Craft name", DEMO_LOG)
     IMG.mkdir(parents=True, exist_ok=True)
     async with async_playwright() as p:
-        b = await p.chromium.launch()
+        b = await p.chromium.launch(args=GL_ARGS)          # software WebGL, so the 3D splash renders without a GPU
         pg = await b.new_page(viewport={"width": 1440, "height": 900}, color_scheme="dark", accept_downloads=True)
         errors = []
         pg.on("pageerror", lambda e: errors.append(str(e)))
-        await pg.goto(base + "/"); await pg.wait_for_timeout(1500)
+        await pg.goto(base + "/"); await pg.wait_for_timeout(11000)       # the splash (no log open yet): the toy world, mid-flight
+        await shot_splash(pg)
         await pg.evaluate("([k, v]) => { localStorage.clear(); localStorage.setItem(k, JSON.stringify(v)); }", [f"bbx.prop:{craft}", DEMO_PROP])
         await pg.select_option("#file", DEMO_LOG); await pg.wait_for_timeout(4000)
 

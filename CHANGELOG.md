@@ -3,6 +3,50 @@
 Every release lists what changed for pilots first, then fixes. Screenshots, the banner and `docs/sample-report.pdf` are
 regenerated from the app for every release (`python tools/release.py all`).
 
+## 2.4 · 2026-10-13
+
+**New**
+- **Splash: it never stops.** The flight is now one endless run: the next flight is built in the background from where the current one ends, so the quad, the camera, the trail and the plots carry on without a cut or a reset.
+- **Splash: the pilot's sticks.** Two gimbals at the bottom of the viewer show the left (throttle, yaw) and right (pitch, roll) stick in real time, with the last second of travel as a line, so you can see how each trick is flown. Toggle with the *Sticks* chip.
+- **Splash: a clearer trail.** The trail is a ribbon that is thick next to the quad and thins out towards its tail.
+- **Splash: plots tied to the tricks.** The motor and PID plots shade and name each trick as it is flown.
+
+**Fixed**
+- The PID plot no longer changes shape as it scrolls (it was drawing every other sample, and which ones shifted with the window).
+
+## 2.3 · 2026-10-12
+
+**New**
+- **Splash: a world with a plan.** The toy world is now a small town instead of scattered props: a street grid with a plaza, downtown towers, midtown, parks, a skatepark and residential blocks, a ring road with race gates, and farm, industry, lake and hill districts, all inside a forest. Shorter render distance and fewer objects make it lighter.
+- **Splash: faster live plots.** The three plots are drawn directly on canvas, many times faster than before, and their scales are fixed so they no longer wobble.
+- **Splash: cleaner effects.** The trail is a plain line and the prop-wash particles are flat triangles.
+
+## 2.2 · 2026-10-12
+
+**New**
+- **Splash: faster, more natural flying.** Cruise speed is now around 18 m/s (it was 10), with banked, coordinated turns, tangential passes around towers
+  and houses, a wandering cruise height, and a speed that eases off in tight spots and opens up in clear air.
+- **Splash: a quad that is actually controlled.** The flight now runs through a rate PID loop, a mixer and lagging motors, with gyro noise, turbulence
+  and gusts of wind acting on it, so the lines wobble and correct the way a real flight does.
+- **Splash: three live plots** under the viewer, in the analyzer's own style: motor outputs, PID terms (roll / pitch / yaw) and an endlessly scrolling gyro
+  spectrogram with the motor lines drawn dotted. Toggle them with the *Live plots* chip.
+- **Splash: a new look.** A night-grid world: muted faces with crease-edge wireframe, a terrain grid, a horizon fog that hides the world's end, and a
+  blueprint version for the light theme. The Wide camera now moves out of the way of buildings.
+
+## 2.1 · 2026-10-12
+
+**New**
+- **A toy world on the splash screen.** With no log open, the quad now flies through a procedurally built 3D world:
+  undulating terrain with a lake, a town, a skatepark, an industrial yard and a farm, filled from a catalogue of 100
+  object kinds (houses, towers, trees, ramps, gates, lamps, cars, silos, windmills, toys…) that repeat around the map.
+  The autopilot follows the terrain, picks a ramp, gate, tower, house, car or lamp, flies to it and does a trick there
+  ("SNAP ROLL · at the square gate"). Same world every time, a different flight every loop; it never hits anything.
+- Chase, Wide and FPV cameras, a Trail toggle, and the existing speed, pause, particles and orbit controls.
+- Without WebGL the old flat-ground viewer is used.
+
+**Under the hood**
+- Three.js r168 (MIT) is vendored in `static/vendor/` and loaded only for the splash; nothing else in the app uses it.
+
 ## 2.0 · 2026-10-11
 
 **New**
