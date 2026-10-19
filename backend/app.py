@@ -1,6 +1,6 @@
 """BBX — Betaflight blackbox analyzer. Run: uvicorn app:app --reload  (or: python app.py)"""
 import math
-from functools import lru_cache
+from functools import lru_cache, wraps
 from threading import Lock
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, HTTPException, Query
@@ -56,6 +56,22 @@ def get(name: str, idx: int) -> Log:
         return _load(p, idx)
 
 
+def memo(fn):
+    """Remember an analysis endpoint's answer for the open log (same arguments -> same answer): switching tabs, re-opening a
+    tab and the summary's repeated requests then cost nothing. The memo lives and dies with the cached log."""
+    @wraps(fn)
+    def w(*a, **k):
+        lg = get(k["name"], k["idx"])
+        m = lg.__dict__.setdefault("_api_memo", {})
+        key = (fn.__name__,) + tuple(sorted((x, repr(y)) for x, y in k.items()))
+        if key not in m:
+            if len(m) > 80:
+                m.pop(next(iter(m)))
+            m[key] = fn(*a, **k)
+        return m[key]
+    return w
+
+
 @lru_cache(maxsize=4)
 def _load(p: Path, idx: int) -> Log:
     return Log(p, idx)
@@ -107,11 +123,13 @@ def psd(name: str, idx: int, fields: str, t0: float = None, t1: float = None):
 
 
 @app.get("/api/{name}/{idx}/spectrogram")
+@memo
 def spectrogram(name: str, idx: int, field: str, mode: str = "throttle", t0: float = None, t1: float = None, nper: int = 256):
     return get(name, idx).spectrogram(field, mode, t0, t1, nper=nper)
 
 
 @app.get("/api/{name}/{idx}/noise")
+@memo
 def noise(name: str, idx: int, t0: float = None, t1: float = None, res_prom: float = 6, res_persist: float = 40, res_mask: float = 4,
           res_fmax: float = None, nper: int = 512, prop: float = None, blades: int = None):
     nper = int(min(4096, max(128, 2 ** round(math.log2(max(nper, 2))))))
@@ -124,6 +142,7 @@ def profile(name: str, idx: int, prop: float = None, blades: int = None, auw: fl
 
 
 @app.get("/api/{name}/{idx}/resonances")
+@memo
 def resonances(name: str, idx: int, t0: float = None, t1: float = None, prom: float = 6, persist: float = 40, mask: float = 4, fmax: float = None):
     return get(name, idx).resonances(t0, t1, prom=prom, persist=persist, mask=mask, fmax=fmax)
 
@@ -136,11 +155,13 @@ def playback(name: str, idx: int, rate: float = 250):
 
 
 @app.get("/api/{name}/{idx}/motors")
+@memo
 def motors(name: str, idx: int, t0: float = None, t1: float = None, thr_min: float = 0, thr_max: float = 100):
     return get(name, idx).motors(t0, t1, thr_min, thr_max)
 
 
 @app.get("/api/{name}/{idx}/step")
+@memo
 def step(name: str, idx: int, t0: float = None, t1: float = None, win_s: float = 2.0, min_sp: float = 20,
          max_sp: float = 2000, thr_min: float = 0, thr_max: float = 100, prop: float = None, blades: int = None, src: str = "gyroADC"):
     src = src if src in ("gyroADC", "gyroUnfilt") else "gyroADC"
@@ -148,6 +169,7 @@ def step(name: str, idx: int, t0: float = None, t1: float = None, win_s: float =
 
 
 @app.get("/api/{name}/{idx}/filterplan")
+@memo
 def filterplan(name: str, idx: int, t0: float = None, t1: float = None, prom: float = 6, persist: float = 40, mask: float = 4, fmax: float = None,
                prop: float = None, blades: int = None):
     return get(name, idx).filterplan(t0, t1, prop=prop, blades=blades, prom=prom, persist=persist, mask=mask, fmax=fmax)
@@ -228,6 +250,7 @@ def compare_(a: str, b: str, ai: int = 1, bi: int = 1, pa: float = None, ba: int
 
 
 @app.get("/api/{name}/{idx}/{kind}")
+@memo
 def flight(name: str, idx: int, kind: str, t0: float = None, t1: float = None, prop: float = None, blades: int = None,
            chop: float = None, drop: float = None, win: float = None, stick: float = None, skip: float = None, flo: float = None, fhi: float = None, minev: int = None):
     if kind not in ("pidterms", "motorout", "propwash"):

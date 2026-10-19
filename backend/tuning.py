@@ -608,8 +608,9 @@ def step_reliability(t_ms, steps, m, ax, rng, nboot=150):
     n = len(steps)
     t = np.asarray(t_ms)
     B = []
+    S32 = np.asarray(steps, np.float32)   # float32 halves the memory traffic of the 150 resampled medians; the 90 % ranges are rounded far coarser than that
     for _ in range(nboot if n >= 5 else 0):
-        q = np.median(steps[rng.integers(0, n, n)], 0)
+        q = np.median(S32[rng.integers(0, n, n)], 0).astype(float)
         b = step_metrics(t, q, q, q)
         B.append((b["overshoot_pct"], b["rise_ms"] if b["rise_ms"] is not None else np.nan, b["steady"], b["ringing"], b["peak"]))
     B = np.array(B, float) if B else np.full((1, 5), np.nan)

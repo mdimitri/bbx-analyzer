@@ -66,12 +66,12 @@ const CR3 = (() => {
         return eg; } const g = new T.Group(), op = o.op != null ? o.op : translucent ? 0.62 : null, mt = new T.MeshStandardMaterial({ color: col, flatShading: true, roughness: L.metal ? 0.38 : 0.72, metalness: L.metal ? 0.7 : 0.05, side: o.double ? T.DoubleSide : T.FrontSide, transparent: op != null, opacity: op ?? 1, emissive: o.glow ? col : 0x000000, emissiveIntensity: o.glow ? 0.9 : 0 });
       g.add(new T.Mesh(geo, mt)); if (!o.noEdge) g.add(new T.LineSegments(new T.EdgesGeometry(geo, o.ang ?? 22), new T.LineBasicMaterial({ color: C.edge, transparent: true, opacity: o.eo ?? 0.85 }))); return g; };
     const place = (g, x, y, z, sx, sy, sz) => { g.position.set(x, y, z); if (sx !== undefined) g.scale.set(sx, sy ?? sx, sz ?? sx); return g; };
-    const ell = (sx, sy, sz, col, o = {}) => place(mesh(new T.IcosahedronGeometry(1, o.d ?? 1), col, o), 0, 0, 0, sx, sy, sz);
-    const cone = (r, h, seg = 5, col = C.body, o = {}) => mesh(new T.ConeGeometry(r, h, seg), col, o), cyl = (r1, r2, h, seg = 6, col = C.body, o = {}) => mesh(new T.CylinderGeometry(r1, r2, h, seg), col, o), box = (sx, sy, sz, col = C.body, o = {}) => mesh(new T.BoxGeometry(sx, sy, sz), col, o);
+    const ell = (sx, sy, sz, col, o = {}) => place(mesh(new T.IcosahedronGeometry(1, (o.d ?? 1) + 1), col, { ang: 12, ...o }), 0, 0, 0, sx, sy, sz);   // one subdivision finer than before: 2-4x the faces
+    const fine = n => n <= 3 ? 6 : Math.min(14, n * 2), cone = (r, h, seg = 5, col = C.body, o = {}) => mesh(new T.ConeGeometry(r, h, fine(seg), 3), col, { ang: 30, ...o }), cyl = (r1, r2, h, seg = 6, col = C.body, o = {}) => mesh(new T.CylinderGeometry(r1, r2, h, fine(seg), 2), col, { ang: 30, ...o }), box = (sx, sy, sz, col = C.body, o = {}) => mesh(new T.BoxGeometry(sx, sy, sz), col, o);
     const UPV = new T.Vector3(0, 1, 0);
     // a limb is a pivot at its start joint holding the cylinder out to its end; build() later links end-to-start limbs into chains and gives legs a gait and tails a wag
     const joints = [];
-    const limb = (a, b, r0, r1, col, o = {}) => { const d = new T.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length() || 1e-3; const g = mesh(new T.CylinderGeometry(r1, r0, len, 8), col, { noEdge: o.noEdge ?? true, ...o });
+    const limb = (a, b, r0, r1, col, o = {}) => { const d = new T.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length() || 1e-3; const g = mesh(new T.CylinderGeometry(r1, r0, len, 14, 2), col, { noEdge: o.noEdge ?? true, ...o });
       g.position.set(d.x / 2, d.y / 2, d.z / 2); g.quaternion.setFromUnitVectors(UPV, d.clone().normalize()); const pv = new T.Group(); pv.position.set(a[0], a[1], a[2]); pv.add(g); root.add(pv);
       joints.push({ pv, a, b, len, r0, r1, col, order: joints.length, kids: [], par: null, dir: [d.x / len, d.y / len, d.z / len] }); return pv; };
     // a wing outline (span along +z, chord along +x), as a flat shape
@@ -85,13 +85,28 @@ const CR3 = (() => {
       const sh = new T.Shape(); P_.forEach(([a, b], i) => i ? sh.lineTo(a * s, b * ch) : sh.moveTo(a * s, b * ch)); sh.closePath();
       return new T.ShapeGeometry(sh).applyMatrix4(new T.Matrix4().makeBasis(new T.Vector3(0, 0, 1), new T.Vector3(1, 0, 0), new T.Vector3(0, 1, 0)));   // shape x (span) → +z, shape y (chord) → +x, normal → +y
     };
+    // a wing is a subdivided membrane whose surface, outline and struts flex along the span: the tip lags the beat and curls, the leading edge leads
+    const subdiv = (geo, n) => { let g = geo.index ? geo.toNonIndexed() : geo; for (let k = 0; k < n; k++) { const p = g.attributes.position.array, out = []; for (let i = 0; i < p.length; i += 9) { const A = [p[i], p[i + 1], p[i + 2]], B = [p[i + 3], p[i + 4], p[i + 5]], Cc = [p[i + 6], p[i + 7], p[i + 8]], m = (u, v) => [(u[0] + v[0]) / 2, (u[1] + v[1]) / 2, (u[2] + v[2]) / 2], AB = m(A, B), BC = m(B, Cc), CA = m(Cc, A);
+          [[A, AB, CA], [AB, B, BC], [CA, BC, Cc], [AB, BC, CA]].forEach(t => t.forEach(v => out.push(...v))); } g = new T.BufferGeometry(); g.setAttribute("position", new T.Float32BufferAttribute(out, 3)); g.computeVertexNormals(); } return g; };
     const addWing = (px, py, pz, side, kind, s, ch, col, o = {}) => {
-      const pivot = new T.Group(); pivot.position.set(px, py, pz); const m = mesh(outline(kind, s, ch), col, { double: true, op: o.op, eo: o.eo ?? 0.8, ang: 5 }); m.scale.z = side; pivot.add(m);
-      if (o.bones !== false) { const g = new T.BufferGeometry().setFromPoints([new T.Vector3(0, 0, 0), new T.Vector3(0.05 * s, 0, 0.5 * s * side), new T.Vector3(0.1 * ch, 0, s * side)]); pivot.add(new T.Line(g, new T.LineBasicMaterial({ color: C.edge }))); owned.push(g);
-        if (kind === "membrane" || kind === "feather" || kind === "fin") { const pts = []; const fan = kind === "feather" ? [0.3, 0.52, 0.74, 0.92] : [0.45, 0.75, 0.95]; fan.forEach(f => { pts.push(new T.Vector3(0.04 * s, 0, 0.2 * s * side), new T.Vector3((kind === "feather" ? -0.5 : -0.38) * ch * (0.5 + 0.7 * (1 - Math.abs(f - 0.6))), 0, f * s * side)); });
-          const g2 = new T.BufferGeometry().setFromPoints(pts); pivot.add(new T.LineSegments(g2, new T.LineBasicMaterial({ color: C.edge, transparent: true, opacity: 0.55 }))); owned.push(g2); } }
+      const pivot = new T.Group(); pivot.position.set(px, py, pz); const geo = subdiv(outline(kind, s, ch), 2); owned.push(geo);
+      const m = mesh(geo, col, { double: true, op: o.op, noEdge: true }); m.scale.z = side; pivot.add(m);
+      const base = geo.attributes.position.array.slice(), parts = [{ attr: geo.attributes.position, base, sc: true }];
+      const lineOf = (pts, loop, opacity, seg) => { const g = new T.BufferGeometry().setFromPoints(pts); owned.push(g); const L_ = seg ? new T.LineSegments(g, new T.LineBasicMaterial({ color: C.edge, transparent: true, opacity })) : new (loop ? T.LineLoop : T.Line)(g, new T.LineBasicMaterial({ color: C.edge, transparent: true, opacity })); L_.frustumCulled = false; pivot.add(L_); parts.push({ attr: g.attributes.position, base: g.attributes.position.array.slice(), sc: false }); return L_; };
+      // the outline of the membrane, so its edge follows the flexing surface
+      { const sh = outline(kind, s, ch), pos = sh.attributes.position, pts = [];   // ShapeGeometry lists the contour points first, in order
+        for (let i = 0; i < pos.count; i++) { const v = new T.Vector3(pos.getX(i), 0, pos.getZ(i)); if (!pts.length || pts[pts.length - 1].distanceTo(v) > 1e-4) pts.push(v); }
+        if (pts.length > 2 && pts[0].distanceTo(pts[pts.length - 1]) < 1e-4) pts.pop(); lineOf(pts, true, o.eo ?? 0.8, false).scale.z = side; sh.dispose(); }
+      if (o.bones !== false) {
+        lineOf([new T.Vector3(0, 0, 0), new T.Vector3(0.05 * s, 0, 0.5 * s), new T.Vector3(0.1 * ch, 0, s)], false, 1, false).scale.z = side;
+        if (kind === "membrane" || kind === "feather" || kind === "fin") { const pts = [], fan = kind === "feather" ? [0.3, 0.52, 0.74, 0.92] : [0.45, 0.75, 0.95]; fan.forEach(f => { pts.push(new T.Vector3(0.04 * s, 0, 0.2 * s), new T.Vector3((kind === "feather" ? -0.5 : -0.38) * ch * (0.5 + 0.7 * (1 - Math.abs(f - 0.6))), 0, f * s)); }); lineOf(pts, false, 0.55, true).scale.z = side; } }
       const tip = new T.Object3D(); tip.position.set(0.1 * ch, 0, s * side); pivot.add(tip); tips.push(tip); root.add(pivot);
-      wings.push({ pivot, side, amp: o.amp ?? 0.8, ph: o.ph ?? 0, tw: o.tw ?? 0.25 }); return pivot; };
+      const flexAmt = o.flex ?? (kind === "panel" ? 0.04 : kind === "leaf" || kind === "butter" ? 0.18 : 0.26);
+      const flex = (p, a) => { const k = flexAmt * s * (0.4 + 0.6 * Math.min(1, a / 0.7)), c1 = Math.cos(p), c2 = Math.cos(2 * p + 0.6);
+        parts.forEach(pt => { const arr = pt.attr.array, b = pt.base; for (let i = 0; i < pt.attr.count; i++) { const u = Math.min(1, Math.abs(b[i * 3 + 2]) / s), u2 = u * u;
+          arr[i * 3 + 1] = b[i * 3 + 1] + k * (u2 * (c1 + 0.25 * c2) * 0.55) - 0.05 * ch * u * Math.sin(p);                          // the tip lags the beat
+          arr[i * 3] = b[i * 3] - 0.12 * ch * u2 * c1; } pt.attr.needsUpdate = true; }); };
+      wings.push({ pivot, side, amp: o.amp ?? 0.8, ph: o.ph ?? 0, tw: o.tw ?? 0.25, flex }); return pivot; };
     const wingPair = (px, py, pz, kind, s, ch, col, o) => { addWing(px, py, pz, 1, kind, s, ch, col, o); addWing(px, py, -pz, -1, kind, s, ch, col, o); };
     const tailChain = (n, len, r0, col, y = 0, x0 = -0.8, wag = 0.5) => { const segs = []; let par = root;
       for (let i = 0; i < n; i++) { const seg = new T.Group(); seg.position.set(i ? -len : x0, i ? 0 : y, 0); const m = mesh(new T.ConeGeometry(r0 * (1 - i / (n + 1)), len * 1.15, 5).rotateZ(Math.PI / 2).translate(-len * 0.5, 0, 0), col); seg.add(m); par.add(seg); segs.push(seg); par = seg; }
@@ -183,7 +198,7 @@ const CR3 = (() => {
       const cs = st.stats.creature, lk = rig.look, fam = lk.a === "insect" ? 4.5 : lk.fey ? 3.5 : lk.a === "spirit" ? 0.6 : lk.a === "fish" || lk.a === "squid" ? 0.35 : lk.hang ? 1.4 : lk.a === "craft" ? 0.9 : 1;
       const hz = [0, 5.5, 4.2, 3.2, 2.2, 1.5][st.c.sz] * fam * (st.c.kind === "Absurd & unlikely" ? 2.2 : 1) * (1.3 - 0.5 * cs.end) * (0.85 + 0.4 * (st.F.stat.pwr)) * (1 + 0.25 * Math.max(0, Math.min(1, F.climb / 8)));
       st.flap += dt * hz * 2 * Math.PI; const glide = c => 1 - 0.55 * Math.max(0, Math.min(1, Math.abs(F.bank) / 1.1)) * (lk.a === "bird" || lk.a === "humanoid" ? 1 : 0.4);
-      rig.wings.forEach(w => { const a = w.amp * (0.55 + 0.55 * st.F.stat.pwr) * glide(st.c), p = st.flap + w.ph; const ang = a * (Math.sin(p) + 0.18 * Math.sin(2 * p + 0.6)); w.pivot.rotation.x = w.side * ang * (w.side > 0 ? 1 : 1) - 0; w.pivot.rotation.z = -w.tw * Math.cos(p) * 0.5; });
+      rig.wings.forEach(w => { const a = w.amp * (0.55 + 0.55 * st.F.stat.pwr) * glide(st.c), p = st.flap + w.ph; const ang = a * (Math.sin(p) + 0.18 * Math.sin(2 * p + 0.6)); w.pivot.rotation.x = w.side * ang * (w.side > 0 ? 1 : 1) - 0; w.pivot.rotation.z = -w.tw * Math.cos(p) * 0.5; w.flex(p, a); });
       { const g = rig.gait, spd = F.speed || 0; g.gal = Math.max(0, Math.min(1, (spd - 5) / 18)); g.w = 4 + 0.45 * spd * (0.5 + 0.7 / Math.max(0.5, rig.size)); g.amp = 0.32 + 0.32 * g.gal; }
       rig.ticks.forEach(fn => fn(st.t));
       eu.set(F.rollA, F.yawA, F.pitchA, "YZX"); q.setFromEuler(eu); if (!st.qs) st.qs = q.clone(); st.qs.slerp(q, 1 - Math.exp(-dt / 0.09)); rig.root.quaternion.copy(st.qs); rig.root.position.set(0, Math.sin(st.t * 1.1) * 0.025 * sc, 0);
@@ -265,9 +280,9 @@ async function renderCreature() {
     $("crVerdict").innerHTML = CRS.sel === best.c.id ? `<span class="hint">${esc(craft)} flies most like</span><div class="crt-big">${esc(c.name)}</div><span class="badge lv-good">${m.like}% alike</span>` : `<span class="hint">${esc(craft)} vs</span><div class="crt-big">${esc(c.name)}</div><span class="badge lv-info">${m.like}% alike</span> <button class="btn sm ghost" id="crBest">back to the best match (${esc(best.c.name)})</button>`;
     if ($("crBest")) $("crBest").onclick = () => select(best.c.id);
     // radar chart: the quad (accent, solid) over the creature (its kind's colour, dashed)
-    const R0 = 74, cx = 110, cy = 100, pt = (i, v) => { const a = -Math.PI / 2 + i / 8 * 2 * Math.PI, r = R0 * v / 99; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; }, poly = vs => vs.map((v, i) => pt(i, v).join(",")).join(" ");
+    const R0 = 80, cx = 110, cy = 100, pt = (i, v) => { const a = -Math.PI / 2 + i / 8 * 2 * Math.PI, r = R0 * v / 99; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; }, poly = vs => vs.map((v, i) => pt(i, v).join(",")).join(" ");
     $("crRadar").innerHTML = `<svg viewBox="0 0 220 200" role="img" aria-label="Radar chart of the quad against the creature">${[25, 50, 75, 99].map(r => `<polygon points="${poly(Array(8).fill(r))}" fill="none" stroke="var(--grid)" stroke-width="1"/>`).join("")}
-      ${CR_AXES.map(([k, n], i) => { const [x, y] = pt(i, 99), [lx, ly] = pt(i, 117); return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--grid)"/><text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" font-size="8.5" fill="var(--ink2)">${n}</text>`; }).join("")}
+      ${CR_AXES.map(([k, n], i) => { const [x, y] = pt(i, 99), [lx, ly] = pt(i, 114); return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--grid)"/><text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" font-size="10.5" font-weight="600" fill="var(--ink2)">${n}</text>`; }).join("")}
       <polygon points="${poly(c.v)}" fill="${hex(c.kind)}" fill-opacity="0.22" stroke="${hex(c.kind)}" stroke-width="2" stroke-dasharray="5 3"/><polygon points="${poly(q)}" fill="var(--accent)" fill-opacity="0.18" stroke="var(--accent)" stroke-width="2.4"/></svg>
       <div class="crt-leg"><span><i style="border-top:2px solid var(--accent)"></i>${esc(craft)}</span><span><i style="border-top:2px dashed ${hex(c.kind)}"></i>${esc(c.name)}</span></div>`;
     // hovering a wedge of the radar explains that axis: a one-liner for each of the two, then the numbers and what the score is made of

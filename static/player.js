@@ -413,7 +413,8 @@ function drawViewer(cv = $("v3d"), t = PB.t, o = null) {
   c.font = "12px system-ui"; c.fillStyle = ink2;
   if (o.hudText) c.fillText(`t ${t.toFixed(2)} s · throttle ${d.ch.thr[i].toFixed(0)}% · ${o.src === "raw" ? "raw" : "filtered"} gyro`, 12, 20);
   c.fillStyle = css("--muted"); c.font = "11px system-ui";
-  if (o.hudText) c.fillText(`vibration shake ${realMM < 0.1 ? (realMM * 1000).toFixed(0) + " µm" : realMM.toFixed(2) + " mm"} (shown ${fmtG(o.shake)}) · wobble ${realDeg.toFixed(2)}° (shown ${fmtG(o.wobble)}) · ${craftInch()}″ quad, ${wheelbaseMM()} mm`, 12, 38);
+  if (o.hudText) { const sh1 = `vibration shake ${realMM < 0.1 ? (realMM * 1000).toFixed(0) + " µm" : realMM.toFixed(2) + " mm"} (shown ${fmtG(o.shake)})`, sh2 = `wobble ${realDeg.toFixed(2)}° (shown ${fmtG(o.wobble)}) · ${craftInch()}″ quad, ${wheelbaseMM()} mm`, one = sh1 + " · " + sh2;
+    if (c.measureText(one).width <= W - 24) c.fillText(one, 12, 38); else { c.fillText(sh1, 12, 38); c.fillText(sh2, 12, 52); } }
   if (sh.hud) { const g = o.src === "raw" ? "gyroRaw" : "gyro", bw = Math.min(220, W * 0.35), x0 = 12, y0 = H - 72, R = d.gmax;
     [0, 1, 2].forEach(a => { const y = y0 + a * 22, gv = d.ch[`${g}[${a}]`][i], sv = d.ch[`sp[${a}]`][i], X = v => x0 + 44 + bw / 2 + Math.max(-1, Math.min(1, v / R)) * bw / 2;
       c.fillStyle = ink2; c.font = "11px system-ui"; c.fillText(AX[a], x0, y + 4);

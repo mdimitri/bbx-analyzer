@@ -48,7 +48,7 @@ const SRV_TASK = { compare: "Comparing the two flights", plan: "Building the tun
 const TASK_ORDER = ["compare", "cmp", "plan", "report", "delay", "sim", "decode"];
 const busy = async (fn, label = "Working") => {
   const job = { label, t0: performance.now() }; BUSY.jobs.push(job);
-  if (!BUSY.timer) { BUSY.t0 = performance.now(); BUSY.shown = 0; BUSY.key = ""; BUSY.left = null; $("busy").hidden = false; busyTick(); BUSY.timer = setInterval(busyTick, 300); }
+  if (!BUSY.timer) { BUSY.t0 = performance.now(); BUSY.shown = 0; BUSY.key = ""; BUSY.left = null; $("busy").hidden = false; busyTick(); BUSY.timer = setInterval(busyTick, 120); }
   try { return await fn(); } finally {
     BUSY.jobs.splice(BUSY.jobs.indexOf(job), 1);
     if (!BUSY.jobs.length) { clearInterval(BUSY.timer); BUSY.timer = 0; $("busy").hidden = true; }
@@ -64,7 +64,9 @@ const taskFrac = t => {
 };
 const fmtS = s => s < 1 ? "<1 s" : s < 60 ? `${Math.round(s)} s` : `${Math.floor(s / 60)} min ${Math.round(s % 60)} s`;
 async function busyTick() {
-  const job = BUSY.jobs[BUSY.jobs.length - 1]; if (!job) return;
+  const job = BUSY.jobs[BUSY.jobs.length - 1]; if (!job || BUSY.inflight) return;
+  BUSY.inflight = true; try { await busyTick1(job); } finally { BUSY.inflight = false; } }
+async function busyTick1(job) {
   let pr = {};
   if (S.file) { try { pr = await fetch(`/api/progress?name=${encodeURIComponent(S.file)}&idx=${S.sub}`).then(r => r.json()); } catch (e) {} }
   if (!BUSY.jobs.length) return;
@@ -145,6 +147,7 @@ function cols(n, titles, xtitle, extra = {}) {
 }
 // size the main chart to fill the space between its top and the bottom dock (min = readable floor per tab)
 function fitMain(min) {
+  min = Math.min(min, Math.max(280, Math.round(innerHeight * 0.42)));   // on a short window the chart may be smaller than its usual floor, so it fits without scrolling
   const top = $("main").getBoundingClientRect().top + scrollY, dock = $("dock").offsetHeight;
   $("main").style.height = Math.round(Math.max(min, innerHeight - dock - top - 10)) + "px";
 }
@@ -328,11 +331,11 @@ function tsAnnotate(A, L) {
     [0, 1, 2].forEach(i => { const a = A.axes[String(i)]; if (!a) return;
       const fl = a.flags.map(([n, l]) => `${l === "good" ? "✓" : l === "info" ? "ℹ" : "⚠"} ${n}`), lv = worstOf(a.flags.map(f => f[1]));
       const r = a.rms, extra = Math.abs(a.i_bias) > 5 ? ` · I holds ${a.i_bias > 0 ? "+" : ""}${a.i_bias}` : "";
-      L.annotations.push(tag(i, `RMS  P ${r.P} · I ${r.I} · D ${r.D} · FF ${r.FF}${extra}${a.d_hf != null ? ` · D ${Math.round(a.d_hf * 100)}% noise` : ""}${fl.length ? "  |  " + fl.join("  ") : ""}`, lv)); });
+      L.annotations.push(tag(i, `RMS  P ${r.P} · I ${r.I} · D ${r.D} · FF ${r.FF}${extra}${a.d_hf != null ? ` · D ${Math.round(a.d_hf * 100)}% noise` : ""}${fl.length ? "  |  " + fl.join("  ") : ""}`, lv, 0.985)); });
   } else if (S.tab === "motors") {
     const lv = A.sat_pct > 1.5 || A.floor_pct > 3 ? "warning" : A.sat_pct > 0.2 || A.floor_pct > 0.5 ? "info" : "good";
-    L.annotations.push(tag(0, `hover ≈ ${A.hover_motor ?? "–"}% · at 100%: ${A.sat_pct}% of time · at minimum: ${A.floor_pct}% · buzz ≤ ${Math.max(...A.noise).toFixed(1)}%`, lv));
-    L.annotations.push(tag(1, A.mean.map((v, m) => `M${m + 1} avg ${v}%`).join(" · "), "info"));
+    L.annotations.push(tag(0, `hover ≈ ${A.hover_motor ?? "–"}% · at 100%: ${A.sat_pct}% of time · at minimum: ${A.floor_pct}% · buzz ≤ ${Math.max(...A.noise).toFixed(1)}%`, lv, 0.985));
+    L.annotations.push(tag(1, A.mean.map((v, m) => `M${m + 1} avg ${v}%`).join(" · "), "info", 0.985));
   }
   if (seen.size) L.annotations.push({ text: [...seen].map(k => `<span style="color:${css(EVC[k][0])}">■</span> ${EVC[k][1]}`).join("   "), xref: "paper", yref: "paper", x: 0, y: -0.06, xanchor: "left", yanchor: "top", showarrow: false, font: { size: 10, color: css("--ink2") } });
 }

@@ -10,6 +10,9 @@ PORT="${PORT:-8000}"
 OS="$(uname -s)"
 
 say()  { printf '%s\n' "$*"; }
+T0=$(date +%s)
+step() { say ""; say "[$1/4] $2"; }
+elapsed() { say "      done in $(( $(date +%s) - T0 )) s since start"; }
 fail() {
   say ""; say "!! $*"
   say "   If you are stuck, open an issue on GitHub and paste the lines above."
@@ -32,6 +35,7 @@ rm -f .write_test
 if [ "$OS" = "Darwin" ]; then xattr -dr com.apple.quarantine "$HERE" 2>/dev/null || true; fi
 
 # ---------------------------------------------------------------- 1. a suitable Python (3.10 - 3.13)
+step 1 "Looking for Python 3.10-3.13 (and the private environment in .venv)..."
 # Newest Python releases sometimes lack ready-made packages for a few weeks, so known-good versions are preferred.
 ok_py() {  # usage: ok_py <command>  -> 0 if it runs and is 3.10..3.13
   "$1" -c 'import sys; sys.exit(0 if (3, 10) <= sys.version_info[:2] <= (3, 13) else 1)' >/dev/null 2>&1
@@ -49,15 +53,17 @@ else
   done
 fi
 
+if [ -n "$PY" ]; then say "      found: $PY ($("$PY" -V 2>&1))"; else say "      no suitable Python on this computer (a private copy will be downloaded)"; fi
 UV=""
 get_uv() {  # private copy of 'uv' (a tiny Python manager) in ./.tools; it downloads Python 3.12 into ./.tools too
   if [ -x .tools/uv ]; then UV="$HERE/.tools/uv"; return 0; fi
   say "> No suitable Python found: downloading a private Python 3.12 into this folder (one time, ~40 MB)..."
   mkdir -p .tools
+  say "      downloading the 'uv' Python manager from astral.sh..."
   if command -v curl >/dev/null 2>&1; then
-    curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$HERE/.tools" UV_NO_MODIFY_PATH=1 INSTALLER_NO_MODIFY_PATH=1 sh >/dev/null || return 1
+    curl -LSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$HERE/.tools" UV_NO_MODIFY_PATH=1 INSTALLER_NO_MODIFY_PATH=1 sh || return 1
   elif command -v wget >/dev/null 2>&1; then
-    wget -qO- https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$HERE/.tools" UV_NO_MODIFY_PATH=1 INSTALLER_NO_MODIFY_PATH=1 sh >/dev/null || return 1
+    wget -O- https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="$HERE/.tools" UV_NO_MODIFY_PATH=1 INSTALLER_NO_MODIFY_PATH=1 sh || return 1
   else
     return 1
   fi
@@ -69,14 +75,15 @@ get_uv() {  # private copy of 'uv' (a tiny Python manager) in ./.tools; it downl
 make_venv_uv() {
   get_uv || fail "Could not download Python. Check your internet connection, or install Python 3.12 from https://www.python.org/downloads/ and run this again."
   rm -rf .venv
-  UV_PYTHON_INSTALL_DIR="$HERE/.tools/python" UV_CACHE_DIR="$HERE/.tools/cache" "$UV" venv --seed --python 3.12 .venv >/dev/null \
+  say "      downloading Python 3.12 and creating .venv (progress below)..."
+  UV_PYTHON_INSTALL_DIR="$HERE/.tools/python" UV_CACHE_DIR="$HERE/.tools/cache" "$UV" venv --seed --python 3.12 .venv \
     || fail "Could not set up the private Python."
 }
 if [ ! -x .venv/bin/python ] || ! ok_py .venv/bin/python; then
   rm -rf .venv
   if [ -n "$PY" ]; then
-    say "> First run: setting up (1-3 minutes, needs internet once)..."
-    if ! "$PY" -m venv .venv >/dev/null 2>&1; then
+    say "      first run: creating the private environment .venv (1-3 minutes in total, needs internet once)..."
+    if ! "$PY" -m venv .venv 2>&1 | sed 's/^/      /'; then
       rm -rf .venv
       say "  (this Python can't create environments, e.g. Debian/Ubuntu without python3-venv; using a private Python instead)"
       make_venv_uv
@@ -86,22 +93,31 @@ if [ ! -x .venv/bin/python ] || ! ok_py .venv/bin/python; then
   fi
 fi
 VPY="$HERE/.venv/bin/python"
+say "      environment ready: $("$VPY" -V 2>&1) in .venv"
 
 # ---------------------------------------------------------------- 3. packages (only when requirements.txt changed)
 install_pkgs() {
-  "$VPY" -m pip install --disable-pip-version-check -q --upgrade pip >/dev/null 2>&1
-  "$VPY" -m pip install --disable-pip-version-check -q -r requirements.txt || return 1
+  say "      (a) updating pip"
+  "$VPY" -m pip install --disable-pip-version-check -q --upgrade pip 2>&1 | sed 's/^/          /'
+  say "      (b) web server and maths: $(grep -v '^#' requirements.txt | grep -v '^$' | sed 's/[<>=].*//' | tr '\n' ' ')"
+  "$VPY" -m pip install --disable-pip-version-check --progress-bar off -r requirements.txt 2>&1 | sed 's/^/          /'
+  [ "${PIPESTATUS[0]}" = 0 ] || return 1
   # orangebox (the .BBL decoder): its wheel has an entry point modern pip rejects, so unpack it directly
+  say "      (c) orangebox, the .BBL decoder (downloaded and unpacked directly)"
   rm -rf .venv/dl
-  "$VPY" -m pip download --disable-pip-version-check -q --no-deps "orangebox==0.5.0" -d .venv/dl || return 1
+  "$VPY" -m pip download --disable-pip-version-check --progress-bar off --no-deps "orangebox==0.5.0" -d .venv/dl 2>&1 | sed 's/^/          /'
+  [ "${PIPESTATUS[0]}" = 0 ] || return 1
   "$VPY" -c "import zipfile,glob,sysconfig; zipfile.ZipFile(glob.glob('.venv/dl/orangebox-*.whl')[0]).extractall(sysconfig.get_paths()['purelib'])" || return 1
-  "$VPY" -c "import fastapi, uvicorn, numpy, multipart, orangebox" || return 1
+  say "      (d) checking that everything imports"
+  "$VPY" -c "import fastapi, uvicorn, numpy, multipart, orangebox; print('          ok: fastapi', fastapi.__version__, '| numpy', numpy.__version__)" || return 1
   # optional: numba compiles the simulator's inner loops (learning a quad's dynamics ~3-5x faster); fine without it
-  "$VPY" -m pip install --disable-pip-version-check -q "numba>=0.59" >/dev/null 2>&1 || say "  (optional speed-up 'numba' isn't available for this Python: analyses run a bit slower)"
+  say "      (e) optional speed-up 'numba' (the simulator runs 3-5x faster with it; skipped quietly if unavailable)"
+  "$VPY" -m pip install --disable-pip-version-check --progress-bar off "numba>=0.59" 2>&1 | sed 's/^/          /'
+  [ "${PIPESTATUS[0]}" = 0 ] || say "      (numba isn't available for this Python: analyses run a bit slower)"
   return 0
 }
 if ! cmp -s requirements.txt .venv/.installed 2>/dev/null; then
-  say "> Installing the analysis packages..."
+  step 2 "Installing the analysis packages (only on the first run or after an update)..."
   if ! install_pkgs; then
     if [ -z "$UV" ]; then
       say "  Package install failed with this Python; retrying with a private Python 3.12..."
@@ -112,10 +128,13 @@ if ! cmp -s requirements.txt .venv/.installed 2>/dev/null; then
     fi
   fi
   cp requirements.txt .venv/.installed
+else
+  step 2 "Analysis packages: already installed."
 fi
 
 # ---------------------------------------------------------------- 4. app shortcut with the BBX icon (once)
 if [ ! -e .venv/.shortcut ]; then
+  step 3 "Creating the 'BBX Analyzer' launcher with its icon (one time)..."
   if [ "$OS" = "Darwin" ]; then
     APP="$HERE/BBX Analyzer.app"
     mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
@@ -130,7 +149,7 @@ if [ ! -e .venv/.shortcut ]; then
   <key>CFBundleExecutable</key><string>launcher</string>
   <key>CFBundleIconFile</key><string>bbx</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>2.7.0</string>
+  <key>CFBundleShortVersionString</key><string>2.7.1</string>
   <key>LSMinimumSystemVersion</key><string>10.13</string>
 </dict></plist>
 PLIST
@@ -162,6 +181,8 @@ DESKTOP
   touch .venv/.shortcut
 fi
 
+elapsed
+step 4 "Starting BBX Analyzer (the first start compiles a few helpers; later starts take a few seconds)..."
 # ---------------------------------------------------------------- 5. start the server and open the browser
 while "$VPY" -c "import socket,sys; s=socket.socket(); sys.exit(s.connect_ex(('127.0.0.1',$PORT))!=0)" 2>/dev/null; do PORT=$((PORT + 1)); done
 URL="http://127.0.0.1:$PORT"

@@ -3,6 +3,19 @@
 Every release lists what changed for pilots first, then fixes. Screenshots, the banner and `docs/sample-report.pdf` are
 regenerated from the app for every release (`python tools/release.py all`).
 
+## 2.7.1 · 2026-10-19
+
+**Changed**
+- **Avatar layout fits the screen:** the closest matches are compact chips at the top of the right column, and the radar takes all the remaining height (larger, with bigger axis labels) so it never gets pushed out of view.
+- **Avatar meshes are 2-4× denser** (bodies, limbs, horns and claws are rounder), and wings are now flexing membranes: the surface, outline and struts bend along the span and the tip lags the beat.
+- **Faster:** progress is polled every 120 ms with a quicker bar, repeated analysis requests (Noise, Step response, PID terms, Propwash, Motors, Spectrogram, Filter plan) are answered from a per-log memory instead of recomputed, and the step-response bootstrap is cheaper.
+- **Launchers are verbose:** `start.sh` and `start.bat` now number their steps, name the Python they found, show what pip downloads and installs (including the optional numba speed-up) and how long setup took.
+
+**Fixed**
+- Chart legends no longer overlap the RMS and summary tags on *PIDs vs gyro* and *Motors vs RPM*.
+- The 3D viewer's vibration/wobble line is no longer cut off in a narrow viewer; it wraps to two lines.
+- On short windows the main charts shrink to fit instead of running under the player bar.
+
 ## 2.7.0 · 2026-10-19
 
 **Changed**

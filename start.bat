@@ -21,9 +21,11 @@ set "PYCMD="
 set "USEDUV="
 set "CHECK=import sys; sys.exit(0 if (3,10)<=sys.version_info[:2]<=(3,13) else 1)"
 
+echo.
+echo [1/4] Looking for Python 3.10-3.13 and the private environment (.venv)...
 rem ---- 1. existing environment still good?
 if not exist "%VPY%" goto :findpy
-"%VPY%" -c "%CHECK%" >nul 2>&1 && goto :pkgs
+"%VPY%" -c "%CHECK%" >nul 2>&1 && ( echo       environment found: .venv & goto :pkgs )
 rmdir /s /q ".venv" >nul 2>&1
 
 :findpy
@@ -35,17 +37,18 @@ python -c "%CHECK%" >nul 2>&1 && set "PYCMD=python" && goto :mkvenv
 goto :uvvenv
 
 :mkvenv
-echo ^> First run: setting up (1-3 minutes, needs internet once)...
-%PYCMD% -m venv ".venv" >nul 2>&1 && goto :pkgs
+echo       using %PYCMD%
+echo       first run: creating the private environment .venv (1-3 minutes in total, needs internet once)...
+%PYCMD% -m venv ".venv" && goto :pkgs
 rmdir /s /q ".venv" >nul 2>&1
 goto :uvvenv
 
 :uvvenv
 rem ---- no usable Python: fetch a private one with 'uv' (a small Python manager) into .tools
 if exist ".tools\uv.exe" goto :uvmake
-echo ^> No suitable Python found: downloading a private Python 3.12 into this folder (one time, about 40 MB)...
+echo       no suitable Python on this computer: downloading a private Python 3.12 into this folder (one time, about 40 MB)...
 if not exist ".tools" mkdir ".tools"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $env:UV_INSTALL_DIR=(Resolve-Path '.tools').Path; $env:UV_NO_MODIFY_PATH='1'; $env:INSTALLER_NO_MODIFY_PATH='1'; irm https://astral.sh/uv/install.ps1 | iex" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; $env:UV_INSTALL_DIR=(Resolve-Path '.tools').Path; $env:UV_NO_MODIFY_PATH='1'; $env:INSTALLER_NO_MODIFY_PATH='1'; irm https://astral.sh/uv/install.ps1 | iex"
 if not exist ".tools\uv.exe" if exist ".tools\bin\uv.exe" move /y ".tools\bin\uv.exe" ".tools\uv.exe" >nul 2>&1
 if not exist ".tools\uv.exe" goto :nopython
 :uvmake
@@ -53,12 +56,14 @@ set "USEDUV=1"
 rmdir /s /q ".venv" >nul 2>&1
 set "UV_PYTHON_INSTALL_DIR=%CD%\.tools\python"
 set "UV_CACHE_DIR=%CD%\.tools\cache"
-".tools\uv.exe" venv --seed --python 3.12 ".venv" >nul 2>&1 || goto :nopython
+echo       downloading Python 3.12 and creating .venv (progress below)...
+".tools\uv.exe" venv --seed --python 3.12 ".venv" || goto :nopython
 
 :pkgs
 rem ---- 3. packages, only when requirements.txt changed
-fc /b requirements.txt ".venv\.installed" >nul 2>&1 && goto :shortcut
-echo ^> Installing the analysis packages (1-3 minutes, please wait)...
+fc /b requirements.txt ".venv\.installed" >nul 2>&1 && ( echo. & echo [2/4] Analysis packages: already installed. & goto :shortcut )
+echo.
+echo [2/4] Installing the analysis packages (1-3 minutes, only on the first run or after an update)...
 call :install || goto :pkgfail
 copy /y requirements.txt ".venv\.installed" >nul
 goto :shortcut
@@ -69,22 +74,29 @@ echo   Package install failed with this Python; retrying with a private Python 3
 goto :uvvenv
 
 :install
-"%VPY%" -m pip install --disable-pip-version-check -q --upgrade pip >nul 2>&1
-"%VPY%" -m pip install --disable-pip-version-check -q -r requirements.txt || exit /b 1
+echo       (a) updating pip
+"%VPY%" -m pip install --disable-pip-version-check -q --upgrade pip
+echo       (b) web server and maths packages: fastapi, uvicorn, python-multipart, numpy
+"%VPY%" -m pip install --disable-pip-version-check --progress-bar off -r requirements.txt || exit /b 1
 rem orangebox (the .BBL decoder): its wheel has an entry point modern pip rejects, so unpack it directly
 rmdir /s /q ".venv\dl" >nul 2>&1
-"%VPY%" -m pip download --disable-pip-version-check -q --no-deps orangebox==0.5.0 -d ".venv\dl" || exit /b 1
+echo       (c) orangebox, the .BBL decoder (downloaded and unpacked directly)
+"%VPY%" -m pip download --disable-pip-version-check --progress-bar off --no-deps orangebox==0.5.0 -d ".venv\dl" || exit /b 1
 "%VPY%" -c "import zipfile,glob,sysconfig; zipfile.ZipFile(glob.glob('.venv/dl/orangebox-*.whl')[0]).extractall(sysconfig.get_paths()['purelib'])" || exit /b 1
-"%VPY%" -c "import fastapi, uvicorn, numpy, multipart, orangebox" || exit /b 1
+echo       (d) checking that everything imports
+"%VPY%" -c "import fastapi, uvicorn, numpy, multipart, orangebox; print('          ok: fastapi', fastapi.__version__, '| numpy', numpy.__version__)" || exit /b 1
 rem optional: numba compiles the simulator's inner loops (learning a quad's dynamics ~3-5x faster); fine without it
-"%VPY%" -m pip install --disable-pip-version-check -q "numba>=0.59" >nul 2>&1 || echo   (optional speed-up 'numba' isn't available for this Python: analyses run a bit slower)
+echo       (e) optional speed-up numba (the simulator runs 3-5x faster with it; skipped quietly if unavailable)
+"%VPY%" -m pip install --disable-pip-version-check --progress-bar off "numba>=0.59" || echo       (numba isn't available for this Python: analyses run a bit slower)
 exit /b 0
 
 :shortcut
 rem ---- 4. 'BBX Analyzer' shortcuts with the icon, on the Desktop and in this folder (once)
 if exist ".venv\.shortcut" goto :run
+echo.
+echo [3/4] Creating the BBX Analyzer shortcut with its icon (one time)...
 powershell -NoProfile -ExecutionPolicy Bypass -Command "$w=New-Object -ComObject WScript.Shell; foreach($d in @([Environment]::GetFolderPath('Desktop'), (Get-Location).Path)){ $s=$w.CreateShortcut((Join-Path $d 'BBX Analyzer.lnk')); $s.TargetPath=(Join-Path (Get-Location).Path 'start.bat'); $s.WorkingDirectory=(Get-Location).Path; $s.IconLocation=(Join-Path (Get-Location).Path 'static\brand\bbx.ico'); $s.Description='BBX Analyzer v2 - Betaflight blackbox analysis'; $s.Save() }" >nul 2>&1
-echo ^> Added a 'BBX Analyzer' shortcut to your Desktop.
+echo       added a 'BBX Analyzer' shortcut to your Desktop.
 type nul > ".venv\.shortcut"
 
 :run
@@ -96,6 +108,7 @@ goto :run
 :portok
 set "URL=http://127.0.0.1:%PORT%"
 echo.
+echo [4/4] Starting BBX Analyzer (the first start compiles a few helpers; later starts take a few seconds)
 echo   BBX Analyzer is starting:  %URL%
 echo   Your browser opens by itself in a moment; if not, copy the address above into it.
 echo   Keep this window open while you use it. Close it to stop BBX.
