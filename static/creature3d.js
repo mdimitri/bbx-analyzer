@@ -8,6 +8,33 @@ const CR3 = (() => {
   const SIZE = [0.62, 0.8, 1.0, 1.25, 1.55];            // size class 1..5 → scale of the body (kept close enough that every creature fills the view)
   const hsl = (h, s, l) => new T.Color().setHSL(((h % 360) + 360) % 360 / 360, s, l);
 
+  // Legs and tails: limbs that share an end/start point form a chain (each a child of the one before). A chain that starts hanging downward is a leg and
+  // swings with the gait (front and rear pairs together when galloping, diagonal pairs when walking, the lower segments bending as the foot lifts);
+  // one that starts pointing backwards is a tail and waves, each segment a little behind the one before. Feet, knees and tail tips get a little extra geometry.
+  function animateLimbs(K, joints, gait) {
+    const { T, C, ticks } = K, root = K.root, vec = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+    const live = joints.filter(j => j.pv.parent === root);
+    live.forEach(j => { for (let k = j.order - 1; k >= 0; k--) { const p = joints[k]; if (p.pv.parent !== root && !p.par) continue; if (p !== j && vec(p.b, j.a) < 0.03 && p.pv.parent) { j.par = p; p.kids.push(j); break; } } });
+    live.forEach(j => { if (j.par) { j.par.pv.add(j.pv); j.pv.position.set(j.a[0] - j.par.a[0], j.a[1] - j.par.a[1], j.a[2] - j.par.a[2]); } });
+    const isDown = j => j.dir[1] < -0.45 && j.a[1] < 0.3, isBack = j => j.dir[0] < -0.6 && j.a[0] < 0.1 && Math.abs(j.dir[1]) < 0.7;
+    const legs = [], tails = [], mark = (j, kind, depth, top) => { j.kind = kind; j.depth = depth; j.top = top; j.kids.forEach(k => mark(k, kind, depth + 1, top)); };
+    live.filter(j => !j.par).concat(live.filter(j => j.par)).forEach(j => { if (j.kind) return;
+      if (isDown(j)) { mark(j, "leg", 0, j); legs.push(j); } else if (isBack(j) && !j.par) { mark(j, "tail", 0, j); tails.push(j); } });
+    // detail: a rounded knee where two segments meet, a foot at the end of each leg and a tuft at the end of each tail
+    const addTo = (j, geo, col, pos, o) => { const m = K.mesh(geo, col, { noEdge: true, ...o }); m.position.set(pos[0] - j.a[0], pos[1] - j.a[1], pos[2] - j.a[2]); j.pv.add(m); return m; };
+    live.forEach(j => { if (j.kids.length) addTo(j, new T.IcosahedronGeometry(Math.max(j.r1, j.kids[0].r0) * 1.12, 0), j.col, j.b);
+      else if (j.kind === "leg") { const r = Math.max(j.r1, 0.02), f = addTo(j, new T.IcosahedronGeometry(1, 0), C.pale, [j.b[0] + r * 1.4, j.b[1] - r * 0.4, j.b[2]]); f.scale.set(r * 2.3, r * 1.2, r * 1.5); }
+      else if (j.kind === "tail") { const tf = K.cone(Math.max(0.03, j.r1 * 1.6), 0.18, 5, C.alt, { noEdge: true }); tf.rotation.z = Math.PI / 2; tf.position.set(j.b[0] - j.a[0] - 0.09, j.b[1] - j.a[1], j.b[2] - j.a[2]); j.pv.add(tf); } });
+    if (!legs.length && !tails.length) return;
+    const xs = legs.map(j => j.a[0]), mx = xs.length ? (Math.min(...xs) + Math.max(...xs)) / 2 : 0, spread = xs.length ? Math.max(...xs) - Math.min(...xs) : 0;
+    ticks.push(t => {
+      const sideOff = spread > 0.25 ? Math.PI * (1 - gait.gal) : Math.PI;
+      legs.forEach(j => { const rear = spread > 0.25 && j.a[0] < mx ? 0.9 : 0, ph = gait.w * t + rear + (j.a[2] < 0 ? sideOff : 0) + (j.a[0] * 1.7 % 0.5);
+        const walk = (n, jj) => { jj.pv.rotation.z = n === 0 ? gait.amp * Math.sin(ph) : -gait.amp * 0.9 * (0.55 + 0.45 * Math.sin(ph + 1.3)) * Math.min(2, n); jj.kids.forEach(k => walk(n + 1, k)); }; walk(0, j); });
+      tails.forEach(j => { const wag = (n, jj) => { jj.pv.rotation.y = Math.sin(t * 2.6 - n * 0.7) * (0.22 + 0.06 * n) * (0.7 + 0.5 * gait.gal); jj.pv.rotation.z = Math.sin(t * 1.9 - n * 0.55) * 0.12 + 0.05 * n; jj.kids.forEach(k => wag(n + 1, k)); }; wag(0, j); });
+    });
+  }
+
   // ---------- parts ----------
   // build(c): the creature's look (creaturelooks.js) turned into a model by its archetype (creaturearch.js); K is the kit of parts they share
   function build(c) {
@@ -24,8 +51,11 @@ const CR3 = (() => {
     const ell = (sx, sy, sz, col, o = {}) => place(mesh(new T.IcosahedronGeometry(1, o.d ?? 1), col, o), 0, 0, 0, sx, sy, sz);
     const cone = (r, h, seg = 5, col = C.body, o = {}) => mesh(new T.ConeGeometry(r, h, seg), col, o), cyl = (r1, r2, h, seg = 6, col = C.body, o = {}) => mesh(new T.CylinderGeometry(r1, r2, h, seg), col, o), box = (sx, sy, sz, col = C.body, o = {}) => mesh(new T.BoxGeometry(sx, sy, sz), col, o);
     const UPV = new T.Vector3(0, 1, 0);
-    const limb = (a, b, r0, r1, col, o = {}) => { const d = new T.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length() || 1e-3; const g = mesh(new T.CylinderGeometry(r1, r0, len, 6), col, { noEdge: o.noEdge ?? true, ...o });
-      g.position.set((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2); g.quaternion.setFromUnitVectors(UPV, d.normalize()); root.add(g); return g; };
+    // a limb is a pivot at its start joint holding the cylinder out to its end; build() later links end-to-start limbs into chains and gives legs a gait and tails a wag
+    const joints = [];
+    const limb = (a, b, r0, r1, col, o = {}) => { const d = new T.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length() || 1e-3; const g = mesh(new T.CylinderGeometry(r1, r0, len, 8), col, { noEdge: o.noEdge ?? true, ...o });
+      g.position.set(d.x / 2, d.y / 2, d.z / 2); g.quaternion.setFromUnitVectors(UPV, d.clone().normalize()); const pv = new T.Group(); pv.position.set(a[0], a[1], a[2]); pv.add(g); root.add(pv);
+      joints.push({ pv, a, b, len, r0, r1, col, order: joints.length, kids: [], par: null, dir: [d.x / len, d.y / len, d.z / len] }); return pv; };
     // a wing outline (span along +z, chord along +x), as a flat shape
     const outline = (kind, s, ch) => {
       const P_ = { membrane: [[0, 0.15], [0.35, 0.38], [1, 0.14], [0.86, -0.34], [0.7, -0.14], [0.6, -0.62], [0.4, -0.26], [0.24, -0.6], [0, -0.5]],
@@ -49,7 +79,9 @@ const CR3 = (() => {
     const K = { T, C, root, owned, ticks, wings, tips, mesh, place, ell, cone, cyl, box, limb, wingPair, addWing, tailChain, hsl };
     const arch = CR_ARCH[L.a] || CR_ARCH.spirit; arch(K, L.a in CR_ARCH ? L : { ...L, kind: "wisp" }, c);
     root.userData.owned = owned;
-    return { root, wings, tips, ticks, size: Math.sqrt(L.size || 1), look: L, vertical: false };
+    const gait = { w: 6, amp: 0.45, gal: 0 };
+    animateLimbs(K, joints, gait);
+    return { root, wings, tips, ticks, size: Math.sqrt(L.size || 1), look: L, vertical: false, gait };
   }
 
   // ---------- the flight: attitude, trick and gust model driven by the eight scores (0..1) ----------
@@ -129,6 +161,7 @@ const CR3 = (() => {
       const hz = [0, 5.5, 4.2, 3.2, 2.2, 1.5][st.c.sz] * fam * (st.c.kind === "Absurd & unlikely" ? 2.2 : 1) * (1.3 - 0.5 * cs.end) * (0.85 + 0.4 * (st.F.stat.pwr)) * (1 + 0.25 * Math.max(0, Math.min(1, F.climb / 8)));
       st.flap += dt * hz * 2 * Math.PI; const glide = c => 1 - 0.55 * Math.max(0, Math.min(1, Math.abs(F.bank) / 1.1)) * (lk.a === "bird" || lk.a === "humanoid" ? 1 : 0.4);
       rig.wings.forEach(w => { const a = w.amp * (0.55 + 0.55 * st.F.stat.pwr) * glide(st.c), p = st.flap + w.ph; const ang = a * (Math.sin(p) + 0.18 * Math.sin(2 * p + 0.6)); w.pivot.rotation.x = w.side * ang * (w.side > 0 ? 1 : 1) - 0; w.pivot.rotation.z = -w.tw * Math.cos(p) * 0.5; });
+      { const g = rig.gait, spd = F.speed || 0; g.gal = Math.max(0, Math.min(1, (spd - 5) / 18)); g.w = 4 + 0.45 * spd * (0.5 + 0.7 / Math.max(0.5, rig.size)); g.amp = 0.32 + 0.32 * g.gal; }
       rig.ticks.forEach(fn => fn(st.t));
       eu.set(F.rollA, F.yawA, F.pitchA, "YZX"); rig.root.quaternion.setFromEuler(eu); rig.root.position.set(0, Math.sin(st.t * 2 * Math.PI * hz * 0.5) * 0.05 * sc, 0);
       // the world streams past: wind streaks, wingtip trails and the ground grid all move against the flight direction
@@ -192,13 +225,13 @@ async function renderCreature() {
           <span class="chips" id="crFx">${chip("wind", "Wind", true)}${chip("trails", "Wing trails", true)}${chip("pip", "Quad copy", true)}${chip("auto", "Auto-rotate", true)}</span></div>
         <div class="crt-pip" id="crPip"><span>your quad · same flight</span></div><div class="crt-hud" id="crHud"></div><div class="crt-hint">drag = orbit · wheel = zoom · double-click = reset</div></div>
       <div class="crt-fall" id="crFall" hidden>3D needs WebGL, which this browser has turned off. The scores still work.</div>
+      <div class="fh" style="margin-top:10px">Closest matches</div><div class="crt-top" id="crTop"></div>
     </div>
     <aside class="crt-side">
       <div class="crt-verdict" id="crVerdict"></div>
       <div class="crt-radar" id="crRadar"></div>
       <table class="crt-stats" id="crStats"></table>
       <div class="hint" id="crLore"></div>
-      <div class="fh">Closest matches</div><div class="crt-top" id="crTop"></div>
     </aside>
     <div class="crt-all"><div class="crt-filter"><input id="crSearch" type="search" placeholder="Search ${CREATURES.length} creatures…" value="${esc(CRS.q_)}"><span class="chips" id="crKinds">${["all", ...Object.keys(CR_KINDS)].map(k => `<button class="chip ${CRS.kind === k ? "on" : ""}" data-k="${esc(k)}"><span style="color:var(--ink2)">${k === "all" ? "All kinds" : esc(k)}</span></button>`).join("")}</span></div>
       <div class="crt-grid" id="crGrid"></div></div></div>`;

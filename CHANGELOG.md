@@ -8,6 +8,9 @@ regenerated from the app for every release (`python tools/release.py all`).
 **Changed**
 - **Tune plan only informs.** Filter and PID suggestions no longer carry CLI here: each one links to the tab where you adjust it (filter planner in Noise, the PID simulator), and those tabs now show and copy their own CLI. Logging settings stay in the plan.
 - **Tracking sub-tabs share one layout:** 3D viewer on the left with its controls folded away (open them with *Viewer controls*), chart in the middle, and *What this shows* in a collapsible rail on the right (collapsed by default). The viewer, which can be switched off, now also appears in *PIDs vs gyro* and *Motors vs RPM*; *Sticks vs gyro* gained a *What this shows* panel with tracking error per axis.
+- **PID behaviour sub-tab** no longer shows the 3D viewer and lays out as chart on top, three verdict cards below.
+- **Avatar layout** scales with the window (16:10 stage that fits the height, closest matches under it), checked at 1920×1200.
+- **Avatar creatures move:** legs swing with a gait that follows the flight speed (diagonal steps when slow, a gallop when fast, knees bending as feet lift), tails wag, and models gained rounded knees, feet and tail tips.
 - **Splash exhaust:** 30% slower, scatters more randomly and slows sharply towards the end of its life.
 
 ## 2.6.1 · 2026-10-19

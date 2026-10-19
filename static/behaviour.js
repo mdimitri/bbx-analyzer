@@ -3,7 +3,7 @@
 // Bottom: a verdict card per axis — oscillation (P loop / P-I chase / vibration), D vibration, P-D balance and feedforward.
 S.pidv = store.get("pidv", "traces");
 const pidvSeg = () => `<span class="seg" id="pidv">${[["traces", "Traces", "pid_traces"], ["behaviour", "Behaviour", "pid_beh"]].map(([v, l, t]) => `<button data-v="${v}" data-tip="${t}" class="${S.pidv === v ? "on" : ""}">${l}</button>`).join("")}</span>`;
-function bindPidv() { if ($("pidv")) $("pidv").onclick = e => { const v = e.target.dataset.v; if (!v || v === S.pidv) return; S.pidv = v; store.set("pidv", v); Plotly.purge("main"); $("dash").hidden = true; render(); }; }
+function bindPidv() { if ($("pidv")) $("pidv").onclick = e => { const v = e.target.dataset.v; if (!v || v === S.pidv) return; S.pidv = v; store.set("pidv", v); Plotly.purge("main"); $("dash").hidden = true; setupPlayer(); render(); }; }
 const TERMC = { axisP: "--roll", axisI: "--pitch", axisD: "--yaw", axisF: "--s4" };
 const TERML = { axisP: "P", axisI: "I", axisD: "D", axisF: "FF", err: "error (setpoint − gyro)" };
 const OSCK = { loop: ["loop ringing", "warning"], pi: ["P and I chasing", "warning"], vibration: ["vibration (not the tune)", "info"], other: ["fast ripple (not the loop)", "info"] };
@@ -43,7 +43,7 @@ async function renderPidBehaviour() {
     if (a.d_vib && a.d_vib.share >= 0.3) L.annotations.push({ text: `D ${Math.round(a.d_vib.share * 100)}% above 80 Hz`, xref: `x${s}`, yref: `y${s} domain`, x: Math.log10(Math.max(90, a.d_vib.f)), y: 0.86, showarrow: false, font: { size: 10, color: css(TERMC.axisD) } });
   });
   L.showlegend = true; L.legend = { ...L.legend, orientation: "h", x: 1, xanchor: "right", y: 1.09 };
-  fitMain(380);
+  fitMain(380); $("main").style.height = Math.min(parseFloat($("main").style.height), Math.max(380, Math.round(innerHeight * 0.5))) + "px";
   await Plotly.react("main", tr, L, CFG);
   // verdict cards
   const card = i => {

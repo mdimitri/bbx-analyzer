@@ -789,3 +789,17 @@ select#file { max-width: 230px; } .bar { gap: 6px; } .bar .btn { padding: 4px 8p
 .vctl > summary { cursor: pointer; font-size: 12.5px; color: var(--ink2); padding: 4px 2px; list-style: none; } .vctl > summary::before { content: "▸ "; } .vctl[open] > summary::before { content: "▾ "; }
 .vctl[open] > summary { margin-bottom: 6px; }
 .vctl .vpanel .vrow.col { flex-direction: row; flex-wrap: wrap; }
+
+/* PID behaviour: chart on top, the three verdict cards below it, no viewer */
+.maincard.behv { display: flex; flex-direction: column; }
+.maincard.behv > #main { order: 2; } .maincard.behv > #dash { order: 3; } .maincard.behv > #findings { order: 4; max-height: none !important; }
+.maincard.behv > #controls { order: 1; } .maincard.behv > #tips { order: 0; }
+
+/* Avatar: stage keeps a 16:10 shape and fits the window height; the matches sit under it so both columns are about equally tall */
+.crt { grid-template-columns: minmax(0, 1.5fr) minmax(340px, 1fr); }
+.crt-stage { height: auto; aspect-ratio: 16 / 10; max-height: calc(100vh - 250px); min-height: 340px; width: 100%; }
+.crt-radar svg { max-width: clamp(280px, 24vw, 400px); }
+.crt-stats { font-size: clamp(12px, .8vw, 14px); } .crt-big { font-size: clamp(20px, 1.4vw, 26px); }
+.crt-n { font-size: clamp(24px, 1.8vw, 34px); }
+@media (min-width: 1700px) { .crt-top { grid-template-columns: repeat(3, 1fr); } .crt-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); } }
+@media (min-width: 1500px) { .maincard.behv .bgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

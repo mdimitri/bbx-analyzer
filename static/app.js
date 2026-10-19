@@ -725,7 +725,7 @@ function pidHTML(p) {
     <div class="pidcard lv-${anyCh ? "warning" : "good"}"><div class="hint">One cautious step (${p.step_pct}% for ${u.inch}″ props: bigger props get smaller steps). Based on the filtered-gyro step response${p.d_noisy ? "; D-term is already noisy, so damping is added by lowering P instead of raising D" : ""}. Fly, log, and check again.</div>
     <table class="pidt"><tr><th></th>${keys.map(k => `<th data-tip="${k}">${k}</th>`).join("")}</tr>${rows}</table><ul class="whys">${whys}</ul>
     ${sl ? `<div class="hint">Your PIDs come from the simplified sliders: easiest is to move the sliders instead. ${sl}</div>` : ""}
-    ${p.cli.length ? `<div class="toplan"><span class="hint">These changes are in the Tune plan, together with the filter and mechanical steps, as one CLI block.</span><button class="btn sm" data-go="plan">Open the Tune plan →</button></div>`
+    ${p.cli.length ? `<div class="toplan"><span class="hint">Try and fine-tune these gains in the PID simulator, which also gives the CLI.</span><button class="btn sm" data-go="pidsim">Open the PID simulator →</button></div>`
       : `<div class="hint">No change suggested.</div>`}</div>`;
 }
 
@@ -1241,11 +1241,12 @@ async function renderSummary() {
 
 // ---------- playback wiring ----------
 const PLAYER_TABS = { tracking: { viewer: true, follow: true }, pid: { viewer: true, follow: true }, motors: { viewer: true, follow: true }, health: {} };
+const isBeh = () => S.tab === "pid" && S.pidv === "behaviour";
 const TRK3 = ["tracking", "pid", "motors"];   // chart + 3D viewer on the left, "What this shows" in a collapsible rail on the right
 S.railOpen = store.get("railOpen", false);
 function setupPlayer() {
   if (typeof PB === "undefined" || !S.meta) return;
-  const cfg = PLAYER_TABS[S.tab] || {};
+  const cfg = { ...(PLAYER_TABS[S.tab] || {}) }; if (isBeh()) cfg.viewer = false;   // the PID-behaviour spectra need no 3D viewer
   PB.hooks = {};
   const noTime = ["summary", "plan", "compare", "delay", "avatar"].includes(S.tab);   // pages without a time axis: no timeline
   $("dock").hidden = noTime;
@@ -1304,7 +1305,7 @@ function fitViewer() {
   $("v3d").style.height = Math.max(240, hMain - (ctl ? ctl.offsetHeight : 0) - 12) + "px"; if (typeof PB !== "undefined") PB.dirty = true;
 }
 function syncRail() {
-  const on = TRK3.includes(S.tab) && innerWidth > 1000, mc = document.querySelector(".maincard");
+  const on = TRK3.includes(S.tab) && !isBeh() && innerWidth > 1000, mc = document.querySelector(".maincard"); mc.classList.toggle("behv", isBeh());
   mc.classList.toggle("trk3", on); mc.classList.toggle("railoff", on && !S.railOpen);
   const b = $("railBtn"); b.hidden = !on || !$("findings").innerHTML; b.textContent = S.railOpen ? "Hide ▸" : "What this shows ◂";
 }
