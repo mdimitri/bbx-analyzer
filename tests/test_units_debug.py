@@ -92,6 +92,6 @@ def test_dropout_detector_ignores_spin_down_but_catches_a_real_dropout(short_lg)
     air = np.flatnonzero((c["throttle%"] > 20) & (c["motor%[0]"] > 25))
     i0 = int(air[len(air) // 2]); n = int(0.05 * fs)
     f = c["motorHz[0]"].copy(); f[i0:i0 + n] *= 0.3; c["motorHz[0]"] = f   # 50 ms at 30 % of its speed
-    lg.__dict__.pop("_motordyn", None)
+    lg.__dict__.pop("_motordyn", None); lg.__dict__.pop("_memo", None)   # the data was edited by hand: drop the memoised report
     ev = [e for e in lg.motors()["events"] if e["motor"] == 0]
     assert ev and abs(ev[0]["t"] - lg.t[i0]) < 0.02

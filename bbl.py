@@ -405,7 +405,10 @@ class Log:
 
     def motors(self, t0=None, t1=None, thr_min=0.0, thr_max=100.0):
         from motors import motor_report
-        return motor_report(self, t0, t1, thr_min, thr_max)
+        m = self.__dict__.setdefault("_memo", {}); k = ("motors", t0, t1, thr_min, thr_max)   # revisiting the tab or the report no longer recomputes
+        if k not in m:
+            m[k] = motor_report(self, t0, t1, thr_min, thr_max)
+        return m[k]
 
     def noise(self, t0=None, t1=None, prop=None, blades=None, **kw):
         from tuning import noise_report

@@ -213,20 +213,26 @@ function simVerdict(ax, E, E0) {
   return out;
 }
 
-// ---------- automatic suggestion: small search around the current gains ----------
+// ---------- automatic suggestion ----------
+// Always anchored to the gains the log was flown with (SIMV.cur), never to whatever is in the editor: pressing ✨ again gives the same answer instead of
+// compounding. The search is a bounded grid (P ±25%, I ±40%, D/Dmax ±30% of the logged values) judged on the simulated plant with HARD limits
+// (stable, robustness Ms, phase margin, overshoot, motor noise) and, among the tunes that pass, the best disturbance rejection (IAE) and settling.
+// The logged tune is always a candidate, so the suggestion can never be worse than what you flew.
 function suggestTune() {
-  const res = {};
+  const res = {}, rok = S.profile ? S.profile.params.rise_ok_ms : 30;
   for (let ax = 0; ax < 3; ax++) {
-    const g0 = SIMV.gains[SIMAX[ax]], E0 = evaluate(ax, g0), rok = S.profile ? S.profile.params.rise_ok_ms : 30;
-    let best = null;
-    const cost = (g) => { const E = evaluate(ax, g); if (E.sm.unstable) return 1e9;
-      const ms = Math.max(E.la.ms, E.lx.ms); let c = E.imm.iae / Math.max(1e-6, E0.imm.iae) + 0.6 * (E.sm.settle / Math.max(1, E0.sm.settle));
-      c += Math.max(0, E.sm.over - 10) * 0.04 + Math.max(0, (E.sm.rise || 999) - rok) / rok * 0.5 + Math.max(0, ms - 1.7) * 6;
-      if (E.noise && E0.noise) c += Math.max(0, E.noise / E0.noise - 1.15) * 4;
-      return c; };
-    for (const pm of [0.8, 0.9, 1, 1.1, 1.2]) for (const dm of ax === 2 && !g0.D ? [1] : [0.85, 1, 1.15, 1.3]) for (const im of [0.85, 1, 1.2]) {
-      const g = { ...g0, P: Math.round(g0.P * pm), I: Math.round(g0.I * im), D: Math.round(g0.D * dm), Dmax: Math.round(g0.Dmax * dm) };
-      const c = cost(g); if (!best || c < best.c) best = { c, g };
+    const g0 = SIMV.cur[SIMAX[ax]], E0 = evaluate(ax, g0), ms0 = Math.max(E0.la.ms, E0.lx.ms);
+    const msMax = Math.max(1.7, ms0 * 1.02), overMax = Math.max(12, (E0.sm.over || 0) + 2), pmMin = Math.min(40, E0.la.pm != null ? E0.la.pm : 40);
+    const ok = E => !E.sm.unstable && Math.max(E.la.ms, E.lx.ms) <= msMax && (E.la.pm == null || E.la.pm >= pmMin) && E.sm.over <= overMax
+      && (!E.noise || !E0.noise || E.noise <= E0.noise * 1.2) && (E.sm.rise == null || E0.sm.rise == null || E.sm.rise <= Math.max(rok, E0.sm.rise) * 1.1);
+    const cost = E => E.imm.iae / Math.max(1e-6, E0.imm.iae) + 0.5 * (E.sm.settle / Math.max(1, E0.sm.settle)) + Math.max(0, (E.sm.rise || 0) - rok) / rok * 0.3;
+    let best = { c: cost(E0), g: g0 };
+    const dRatio = g0.D ? g0.Dmax / g0.D : 1;
+    for (const pm of [0.75, 0.85, 0.95, 1, 1.1, 1.25]) for (const dm of g0.D ? [0.7, 0.85, 1, 1.15, 1.3] : [1]) for (const im of [0.7, 0.85, 1, 1.2, 1.4]) {
+      if (pm === 1 && dm === 1 && im === 1) continue;
+      const D = g0.D ? Math.max(1, Math.round(g0.D * dm)) : 0, g = { ...g0, P: Math.max(1, Math.round(g0.P * pm)), I: Math.max(1, Math.round(g0.I * im)), D, Dmax: g0.D ? Math.max(D, Math.round(D * dRatio)) : g0.Dmax };
+      const E = evaluate(ax, g); if (!ok(E)) continue;
+      const c = cost(E); if (c < best.c - 0.01) best = { c, g };   // a candidate must beat the logged tune by a margin, so ties keep what you flew
     }
     res[SIMAX[ax]] = best.g;
   }
@@ -325,7 +331,7 @@ function simPanel() {
   $("simG").oninput = e => { SIMV.gmul = +e.target.value; $("simGv").textContent = SIMV.gmul.toFixed(2); clearTimeout(SIMV._t); SIMV._t = setTimeout(simRun, 60); };
   $("simD").oninput = e => { SIMV.dmul = +e.target.value; $("simDv").textContent = SIMV.dmul.toFixed(2); clearTimeout(SIMV._t); SIMV._t = setTimeout(simRun, 60); };
   $("simReset").onclick = () => { SIMV.gains = JSON.parse(JSON.stringify(SIMV.cur)); SIMV.gmul = SIMV.dmul = 1; store.set("sim.gains:" + key, null); simPanel(); simRun(); };
-  $("simSug").onclick = () => { $("simSug").textContent = "…"; setTimeout(() => { SIMV.gains = suggestTune(); store.set("sim.gains:" + key, SIMV.gains); simPanel(); simRun(); }, 20); };
+  $("simSug").onclick = () => { $("simSug").textContent = "…"; setTimeout(() => { SIMV.gains = suggestTune(); store.set("sim.gains:" + key, SIMV.gains); simPanel(); simRun(); const same = SIMAX.every(a => ["P", "I", "D", "Dmax"].every(k => SIMV.gains[a][k] === SIMV.cur[a][k])); if (same) { $("simSug").textContent = "✨ No safe improvement found"; setTimeout(() => $("simSug") && ($("simSug").textContent = "✨ Suggest"), 2500); } }, 20); };
   $("simCli").onclick = () => { const L = [];
     SIMAX.forEach((a, i) => { const g = SIMV.gains[a], c = SIMV.cur[a], n = ["roll", "pitch", "yaw"][i];
       [["P", "p"], ["I", "i"], ["D", "d"], ["Dmax", "d_max"], ["FF", "f"]].forEach(([k, cli]) => { if (Math.round(g[k]) !== Math.round(c[k])) L.push(`set ${cli}_${n} = ${Math.round(g[k])}`); }); });

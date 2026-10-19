@@ -1234,7 +1234,7 @@ function setupPlayer() {
   if (typeof PB === "undefined" || !S.meta) return;
   const cfg = PLAYER_TABS[S.tab] || {};
   PB.hooks = {};
-  const noTime = ["summary", "plan", "compare", "delay", "creature"].includes(S.tab);   // pages without a time axis: no timeline
+  const noTime = ["summary", "plan", "compare", "delay", "avatar"].includes(S.tab);   // pages without a time axis: no timeline
   $("dock").hidden = noTime;
   if (noTime) { PB.playing = false; unmountViewer(); document.querySelector(".maincard").classList.remove("split"); return; }
   mountPlayer();
@@ -1266,7 +1266,7 @@ function healthLive(d, t) {
   $("hq-cap").textContent = `t ${t.toFixed(1)} s · live`;
 }
 
-const RENDER = { delay: () => renderDelay(), compare: () => renderCompare(), plan: () => renderPlan(), pidsim: () => renderPidSim(), propwash: renderPropwash, summary: renderSummary, tracking: renderTS, pid: renderTS, motors: renderTS, noise: renderNoise, spectro: renderSpectro, step: renderStep, health: renderHealth, creature: () => renderCreature() };
+const RENDER = { delay: () => renderDelay(), compare: () => renderCompare(), plan: () => renderPlan(), pidsim: () => renderPidSim(), propwash: renderPropwash, summary: renderSummary, tracking: renderTS, pid: renderTS, motors: renderTS, noise: renderNoise, spectro: renderSpectro, step: renderStep, health: renderHealth, avatar: () => renderCreature() };
 const render = () => {
   if (!S.meta) return;
   const dash = S.tab === "summary";
@@ -1280,7 +1280,7 @@ const render = () => {
 };
 const TAB_BUSY = { delay: "Analysing the filter delay (learns this quad's dynamics the first time, ~15 s)", compare: "Comparing the two flights (all analyses, both logs)", plan: "Building the tune plan (all analyses)", summary: "Building the summary (all analyses)", tracking: "Loading flight traces", pid: "Analysing the PID terms", motors: "Analysing motor output",
   noise: "Analysing noise and filters", spectro: "Computing spectrograms", step: "Computing step responses", propwash: "Finding throttle chops",
-  creature: "Finding your quad's creature", pidsim: "Preparing the PID simulator", health: "Checking motors and props" };
+  avatar: "Finding your quad's avatar", pidsim: "Preparing the PID simulator", health: "Checking motors and props" };
 const LVORD = { serious: 0, warning: 1, info: 2, good: 3 };
 const SIDE3 = ["step", "pid", "motors", "propwash", "pidsim"];   // chart 2/3 left, findings 1/3 right
 function fitSide() { if (document.querySelector(".maincard.side3")) $("findings").style.maxHeight = $("main").offsetHeight + "px"; }
@@ -1295,7 +1295,21 @@ function updateBadge(tab, list) {
 function setTabLevel(tab, lvl) {
   S.tabLevel[tab] = lvl;
   const btn = document.querySelector(`#tabs [data-tab="${tab}"]`); if (!btn) return;
-  btn.dataset.lvl = lvl;
+  btn.dataset.lvl = lvl; syncTabGroups();
+}
+// ---------- tab groups: seven top-level tabs, the related views live under them as sub-tabs (the old tab buttons stay in the DOM, hidden, so every "go to tab" link still works) ----------
+const TGROUPS = [{ id: "tune", label: "Tune", subs: ["plan", "pidsim", "step"] }, { id: "tracking", label: "Tracking", subs: ["tracking", "pid"] },
+  { id: "noisef", label: "Noise & filters", subs: ["noise", "spectro", "delay"] }, { id: "motorsg", label: "Motors", subs: ["motors", "health"] }];
+const SUBLABEL = { plan: "Tune plan", pidsim: "PID simulator", step: "Step response", tracking: "Sticks vs gyro", pid: "PID terms", noise: "Noise spectrum", spectro: "Spectrogram", delay: "Filter delay", motors: "Motor traces", health: "Motor health" };
+function setupTabGroups() {
+  const nav = $("tabs"), anchor = nav.querySelector('[data-tab="compare"]');
+  for (const g of TGROUPS) { const b = document.createElement("button"); b.dataset.group = g.id; b.textContent = g.label; b.dataset.tip = nav.querySelector(`[data-tab="${g.subs[0]}"]`).dataset.tip; nav.insertBefore(b, anchor); g.btn = b; g.subs.forEach(t => { nav.querySelector(`[data-tab="${t}"]`).hidden = true; }); }
+}
+function syncTabGroups() {
+  for (const g of TGROUPS) { if (!g.btn) continue; g.btn.classList.toggle("gon", g.subs.includes(S.tab));
+    const lv = g.subs.map(t => S.tabLevel[t]).filter(Boolean); if (lv.length) g.btn.dataset.lvl = lv.reduce((w, l) => LVORD[l] < LVORD[w] ? l : w, "good"); else delete g.btn.dataset.lvl; }
+  const g = TGROUPS.find(x => x.subs.includes(S.tab)), bar = $("subtabs"); if (!bar) return; bar.hidden = !g;
+  if (g) { bar.innerHTML = g.subs.map(t => `<button data-sub="${t}" class="${t === S.tab ? "on" : ""}">${SUBLABEL[t]}${S.tabLevel[t] ? `<i class="lvdot lv-${S.tabLevel[t]}"></i>` : ""}</button>`).join(""); store.set("grp." + g.id, S.tab); }
 }
 $("fbadge").onclick = () => { const f = $("findings").hidden || !$("findings").innerHTML ? $("dash") : $("findings"); f.scrollIntoView({ behavior: "smooth", block: "start" }); };
 
@@ -1322,7 +1336,7 @@ function setRange(r) {
 }
 
 function renderSide(m) {
-  const h = m.headers, k = m.key_headers, s = m.stats;
+  const h = m.headers, k = m.key_headers, s = m.stats; S.keyH = k;
   $("craft").innerHTML = `<div class="name">${esc(h["Craft name"] || "Unnamed craft")}</div>
     <div class="cl">${esc(h["Firmware revision"])}</div><div class="cl">${esc(h["Board information"])}</div>
     <div class="cl">${esc((h["Log start datetime"] || "").replace("T", " ").slice(0, 19))}</div>`;
@@ -1373,6 +1387,8 @@ async function loadLog() {
   await loadProfile();
   cmpButton();
   render();
+  // warm the slow analyses while the pilot reads the summary, so the Tune plan, Motors and PID simulator tabs open instantly (results are memoised on both sides)
+  const f = S.file + "|" + S.sub; setTimeout(async () => { for (const [p, q] of [["plan", S.auw ? { auw: S.auw } : {}], ["motors", {}], ["simmodel", {}]]) { if (S.file + "|" + S.sub !== f || S.demo) return; try { await api(p, q); } catch (e) { /* the tab will report it */ } } }, 2500);
 }
 // ---------- prop size (drives size-aware analysis) ----------
 const propKey = () => (S.meta && S.meta.headers["Craft name"]) || S.file;
@@ -1444,9 +1460,12 @@ $("file").onchange = onFile;
 $("sub").onchange = () => { S.sub = +$("sub").value; loadLog(); };
 $("up").onchange = e => e.target.files[0] && upload(e.target.files[0]);
 $("reset").onclick = () => setRange(null);
-$("tabs").onclick = e => { const t = e.target.dataset.tab; if (!t) return; S.tab = t;
+$("subtabs").onclick = e => { const b = e.target.closest("[data-sub]"); if (b) $("tabs").querySelector(`[data-tab="${b.dataset.sub}"]`).click(); };
+$("tabs").onclick = e => { const gid = e.target.dataset.group; if (gid) { const g = TGROUPS.find(x => x.id === gid), t0 = store.get("grp." + gid, g.subs[0]); $("tabs").querySelector(`[data-tab="${g.subs.includes(t0) ? t0 : g.subs[0]}"]`).click(); return; }
+  const t = e.target.dataset.tab; if (!t) return; S.tab = t;
   if (t === "propwash") S.view = null;   // the chop overview needs the whole flight
-  [...$("tabs").children].forEach(b => b.classList.toggle("on", b === e.target)); Plotly.purge("main"); S._anShown = null; $("main")._time = []; $("main")._freq = false; $("findings").innerHTML = ""; setupPlayer(); render(); };
+  [...$("tabs").children].forEach(b => b.classList.toggle("on", b === e.target)); Plotly.purge("main"); S._anShown = null; $("main")._time = []; $("main")._freq = false; $("findings").innerHTML = ""; syncTabGroups(); setupPlayer(); render(); };
+setupTabGroups(); syncTabGroups();
 document.documentElement.dataset.theme = store.get("theme", "dark");   // dark by default
 $("theme").onclick = () => {
   const cur = document.documentElement.dataset.theme || "dark";

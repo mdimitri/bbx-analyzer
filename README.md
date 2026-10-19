@@ -2,7 +2,7 @@
 
 **BBX Analyzer** reads your Betaflight blackbox logs and tells you, in plain words, what is going on with your quad and what to try next. It covers noise and filters, frame resonances, the tune, propwash, and motor and prop health. Every finding comes from your own log, and each fix comes with the CLI lines.
 
-It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 2.5** ([what's new](CHANGELOG.md)).
+It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 2.6** ([what's new](CHANGELOG.md)).
 
 ---
 
@@ -34,7 +34,7 @@ If you know Blackbox Explorer or PIDtoolbox, you already have traces, spectra, s
 
 ![The splash screen: the quad in its toy world](docs/img/splash.png)
 
-- 🐉 **The Creature tab.** A fun one: BBX scores how your quad flew on eight axes (speed, power, agility, nimbleness, endurance, climb, steadiness, smoothness), matches it to the most alike of 129 mythical creatures and shows that creature in 3D, rotatable, flying with your quad's characteristics through wind particles, with radar and stats beside it.
+- 🐉 **The Avatar tab.** A fun one: BBX scores how your quad flew on eight axes (speed, power, agility, nimbleness, endurance, climb, steadiness, smoothness), matches it to the most alike of 150 mythical, wild and absurd creatures (a flying pig for a poor tune, naturally), each with its own 3D model, and a copy of your quad flying the same flight in the corner and shows that creature in 3D, rotatable, flying with your quad's characteristics through wind particles, with radar and stats beside it.
 - 📂 **Collapsible summary cards.** Each card opens with its visual and main findings; expand it for the rest. A filter-latency card sits with them.
 - ↕️ **Better/worse arrows.** Every metric, in the app and the PDF, carries ▲ or ▼ to show which direction is better.
 - 🗺️ **One tune plan.** Every suggestion from every analysis, in the order to apply it (logging → mechanical → filters → PIDs → feedforward), with conflicts resolved and one CLI block to paste. Tick what you want; choices from the filter planner or the PID simulator can replace the automatic proposal.
@@ -67,8 +67,8 @@ If you know Blackbox Explorer or PIDtoolbox, you already have traces, spectra, s
 | **Motor health**: one card per motor, where it sits on the frame | **Battery**: the real motor trace vs the battery-optimal line |
 | ![Noise and filters](docs/img/noise.png) | ![Tracking with the 3D viewer](docs/img/tracking.png) |
 | **Noise & filters**: raw vs filtered, filter shapes, the planner | **Tracking**: sticks vs gyro with the 3D quad |
-| ![Creature tab](docs/img/creature.png) | |
-| **Creature**: your quad's nearest mythical flier | |
+| ![Avatar tab](docs/img/avatar.png) | |
+| **Avatar**: your quad's nearest creature, next to your quad | |
 
 ![The first pages of the PDF report](docs/img/report.png)
 **PDF report**: the first pages of the [sample report](docs/sample-report.pdf) made from the demo log.

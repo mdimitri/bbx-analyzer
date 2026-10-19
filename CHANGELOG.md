@@ -3,6 +3,22 @@
 Every release lists what changed for pilots first, then fixes. Screenshots, the banner and `docs/sample-report.pdf` are
 regenerated from the app for every release (`python tools/release.py all`).
 
+## 2.6 · 2026-10-19
+
+**New**
+- **Avatar tab** (was Creature): 150 creatures, now with their own 3D models (parametric archetypes, far more variety and detail) including a new "Absurd & unlikely" group (flying pig and friends, usually matched to a poor tune). A small copy of your quad flies the same flight in the bottom-right corner for comparison.
+- **Tab groups.** The top bar is now Summary · Tune · Tracking · Noise & filters · Motors · Propwash · Avatar; the related views sit in a pill bar underneath.
+- **Splash exhaust streaks.** Motor particles are fast lines whose speed and number follow each motor's thrust, still diffusing in direction.
+- **Tune plan** opens with a table of the settings to change (Setting · Now · Suggested · Why); the CLI block is collapsed.
+
+## 2.5.1 · 2026-10-19
+
+**Changed**
+- **Splash: paler world, a quad that stands out.** The wireframe world is softer (dimmer lines and shading, lighter road markings); the quad and its LEDs now use the spectrogram's colormap, its motors glow by speed, and the trail is thinner and fainter.
+- **Splash: sticks in the middle** (smaller, bottom centre) in the accent colour; the trick name is back in the accent colour.
+- **PID simulator: ✨ Suggest is repeatable and safe.** It now always searches around the gains the log was flown with (it used to start from the editor's current values, so pressing it again compounded and drifted towards zero). Candidates must be stable and keep robustness (Ms), phase margin, overshoot and motor noise within limits, and must beat the logged tune by a margin; if nothing does, it says so.
+- **Faster:** the Tune plan, Motors and PID simulator analyses are warmed in the background after a log opens, and the motor report is cached.
+
 ## 2.5 · 2026-10-19
 
 **New**

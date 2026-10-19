@@ -121,7 +121,7 @@ async def _shots(port):
         await pg.select_option("#file", DEMO_LOG); await pg.wait_for_timeout(4000)
 
         async def tab(t):
-            await pg.click(f'#tabs [data-tab="{t}"]')
+            await pg.evaluate("t => document.querySelector('#tabs [data-tab=\"' + t + '\"]').click()", t)
             if t == "pidsim":
                 try:
                     await pg.click("#sgOk", timeout=5000)
@@ -145,7 +145,7 @@ async def _shots(port):
         el = await pg.query_selector("#hpwr")
         if el:
             await el.scroll_into_view_if_needed(); await pg.wait_for_timeout(400); await el.screenshot(path=str(IMG / "battery.png")); print("  ✓ battery.png")
-        await tab("creature"); await pg.wait_for_timeout(2500); await shot("creature.png"); print("  ✓ creature.png")
+        await tab("avatar"); await pg.wait_for_timeout(3500); await shot("avatar.png"); print("  ✓ avatar.png")
         # filter delay with the hover card on the stage that costs the most
         await tab("delay")
         await hover_point("""() => { const gd = document.getElementById('main'), bars = gd.data.map((t, k) => [t, k]).filter(([t]) => t.type === 'bar');

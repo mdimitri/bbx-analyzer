@@ -726,3 +726,20 @@ body.grabbing, body.grabbing * { cursor: grabbing !important; user-select: none;
 .crt-card i{width:9px;height:9px;border-radius:50%;background:hsl(var(--h) 55% 55%);flex:none}.crt-card span{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.crt-card b{font-variant-numeric:tabular-nums;color:var(--ink2)}
 .crt-all{grid-column:1/-1}.crt-filter{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px}.crt-filter input{background:var(--panel);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 10px;min-width:220px}
 @media(max-width:1000px){.crt{grid-template-columns:1fr}}
+
+.crt-pip{position:absolute;right:12px;bottom:12px;width:clamp(150px,30%,300px);aspect-ratio:1/.72;border:1px solid var(--line);border-radius:8px;pointer-events:none}.crt-pip span{position:absolute;left:8px;top:6px;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2)}
+
+.tabs button.gon { background: var(--surface); color: var(--ink); box-shadow: inset 0 -2px 0 var(--accent); }
+.subtabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 8px; }
+.subtabs button { font: inherit; font-size: 12px; background: none; border: 1px solid var(--border); color: var(--ink2); padding: 3px 11px; border-radius: 999px; cursor: pointer; }
+.subtabs button:hover { border-color: var(--accent); color: var(--ink); }
+.subtabs button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.lvdot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-left: 6px; vertical-align: middle; background: var(--muted); }
+.lvdot.lv-good { background: var(--good); } .lvdot.lv-info { background: var(--info); } .lvdot.lv-warning { background: var(--warning); } .lvdot.lv-serious { background: var(--serious); }
+
+.phead { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: grid; gap: 8px; background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.phl { font-size: 16px; font-weight: 600; }
+.ptab { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.ptab th { text-align: left; font-weight: 500; color: var(--ink2); padding: 3px 8px; border-bottom: 1px solid var(--border); }
+.ptab td { padding: 4px 8px; border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent); vertical-align: top; }
+.ptab .pnew { color: var(--accent); font-weight: 600; }

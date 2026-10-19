@@ -22,6 +22,7 @@ const CR_KINDS = {
   "Heavenly & infernal": { hue: 345, blurb: "Feathered or leathery, but always dramatic about it." },
   "Construct": { hue: 205, blurb: "Built, not born. Their flight follows a design sheet, which makes them oddly like a quad." },
   "Sky leviathan": { hue: 250, blurb: "Vast, slow and calm. They do not hurry; weather does it for them." },
+  "Absurd & unlikely": { hue: 330, blurb: "Things that have no business being airborne. They are what a rough, wobbly tune tends to resemble." },
   "Night wing": { hue: 265, blurb: "Silent, dark and quick to turn: they fly when the rest of the sky sleeps." },
 };
 // name | kind | body | size 1-5 | spd pwr agi nim end clb std smo
@@ -151,10 +152,31 @@ Giant Bat|Night wing|bat|3|58 52 84 82 66 60 52 40
 Owl King|Night wing|bird|4|60 72 66 60 84 60 80 98
 Night Moth|Night wing|insect|2|42 22 74 70 80 44 70 90
 Shadow Bat|Night wing|bat|2|72 40 90 90 58 64 50 82
-Cave Wyrmling|Night wing|dragon|2|44 52 62 56 52 46 46 38
-Dusk Bat Swarm|Night wing|bat|2|66 44 80 82 70 54 60 52
 Midnight Owl|Night wing|bird|3|56 54 70 66 88 52 78 98
 Owl Sage|Night wing|bird|3|44 46 56 52 90 40 90 96
+Hydra|Dragon|dragon|5|40 88 24 22 60 40 40 24
+Sky Squid|Sky leviathan|jelly|3|50 50 52 50 70 40 56 70
+Kitsune|Fey|beast|3|56 52 82 80 70 56 66 84
+Jackalope|Winged beast|beast|2|52 40 78 74 46 50 40 36
+Flying Pig|Absurd & unlikely|beast|3|22 38 30 26 36 40 26 24
+Winged Cow|Absurd & unlikely|beast|4|20 46 22 20 40 34 30 26
+Flying Brick|Absurd & unlikely|construct|2|30 60 18 12 14 28 10 6
+Rubber Duck Squadron|Absurd & unlikely|bird|2|18 20 34 40 30 22 20 40
+Flying Toaster|Absurd & unlikely|construct|2|26 40 40 34 20 36 18 8
+Penguin Glider|Absurd & unlikely|bird|3|14 16 24 22 30 12 28 30
+Pet Rock With Wings|Absurd & unlikely|construct|1|8 28 6 8 10 14 20 30
+Anvil Falcon|Absurd & unlikely|construct|3|34 80 10 10 8 22 12 6
+Wild Turkey|Absurd & unlikely|bird|3|16 18 18 20 22 14 22 18
+Dodo Airlines|Absurd & unlikely|bird|3|6 10 12 14 14 6 24 28
+Sleepy Sloth|Absurd & unlikely|beast|3|6 12 6 10 80 12 60 70
+Flying Spaghetti Monster|Absurd & unlikely|construct|4|24 30 70 60 20 40 8 4
+Hot-Air Balloon|Absurd & unlikely|construct|5|8 14 6 4 50 20 24 50
+Flying Carpet|Absurd & unlikely|construct|3|28 24 52 56 60 30 62 80
+Witch's Broom|Absurd & unlikely|construct|2|38 36 66 64 40 44 40 50
+Shopping Cart Rocket|Absurd & unlikely|construct|3|40 70 22 20 14 40 14 10
+Paper Plane|Absurd & unlikely|construct|1|24 6 60 70 18 8 20 60
+Rubber Chicken|Absurd & unlikely|bird|2|10 14 36 30 20 12 14 14
+Bumblebee (Allegedly)|Absurd & unlikely|insect|2|30 22 40 44 28 30 16 10
 `;
 const CREATURES = CR_RAW.trim().split("\n").map((l, id) => { const [name, kind, body, sz, st] = l.split("|"), v = st.split(" ").map(Number);
   return { id, name, kind, body, sz: +sz, s: Object.fromEntries(CR_AXES.map(([k], i) => [k, v[i]])), v }; });

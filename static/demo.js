@@ -356,7 +356,7 @@ function drawTrickName(cv, t, hud) {
   c.font = `italic 900 ${Math.round(Math.min(64, W / 14))}px system-ui, sans-serif`;
   const dk = document.documentElement.dataset.theme !== "light";   // black and white like the world behind it: white on black outline, or ink on white
   c.lineWidth = 6; c.lineJoin = "round"; c.strokeStyle = dk ? "rgba(0,0,0,0.75)" : "rgba(255,255,255,0.85)"; c.strokeText(name, W / 2, H * 0.27);
-  c.fillStyle = dk ? "#f4f4f4" : "#111"; c.fillText(name, W / 2, H * 0.27);
+  c.fillStyle = css("--accent"); c.fillText(name, W / 2, H * 0.27);
   c.font = "600 14px system-ui, sans-serif"; c.fillStyle = css("--ink2"); c.fillText(sub, W / 2, H * 0.27 + 24);
   c.restore();
 }
@@ -365,10 +365,10 @@ function drawTrickName(cv, t, hud) {
 function drawSticks(cv, t) {
   const d = PB.d; if (!cv || !d || !d.ch.thrCmd || !DEMO.sticks) return;
   const W = cv.clientWidth, H = cv.clientHeight, c = cv.getContext("2d"); c.setTransform(cv.width / Math.max(1, W), 0, 0, cv.height / Math.max(1, H), 0, 0);
-  const f = v => Math.sign(v) * Math.min(1, (Math.abs(v) / 900) ** 0.8), i = idxAt(t), size = Math.round(Math.max(76, Math.min(116, W * 0.11))), m = 14, y0 = H - size - m - 14;
+  const gap = 18, f = v => Math.sign(v) * Math.min(1, (Math.abs(v) / 900) ** 0.8), i = idxAt(t), size = Math.round(Math.max(60, Math.min(84, W * 0.075))), m = 14, y0 = H - size - 22;
   const stick = j => { j = Math.max(0, Math.min(d.n - 1, j)); return [-f(d.ch["sp[2]"][j]), Math.max(-1, Math.min(1, d.ch.thrCmd[j] / 100 * 2 - 1)), f(d.ch["sp[0]"][j]), f(d.ch["sp[1]"][j])]; };   // yaw, throttle | roll, pitch
-  const ink = css("--ink2"), acc = css("--ink"), sf = css("--surface");   // sticks in plain ink: the splash is black and white
-  [[m, "THROTTLE · YAW", 0], [W - m - size, "PITCH · ROLL", 2]].forEach(([x0, label, o]) => {
+  const ink = css("--ink2"), acc = css("--accent"), sf = css("--surface");   // sticks in plain ink: the splash is black and white
+  [[W / 2 - size - gap / 2, "THROTTLE · YAW", 0], [W / 2 + gap / 2, "PITCH · ROLL", 2]].forEach(([x0, label, o]) => {
     const R = size / 2, cx = x0 + R, cy = y0 + R, P = j => { const s = stick(j); return [cx + s[o] * (R - 8), cy - s[o + 1] * (R - 8)]; };
     c.save(); c.globalAlpha = 0.55; c.fillStyle = sf; c.beginPath(); c.roundRect(x0, y0, size, size, 12); c.fill(); c.globalAlpha = 0.9; c.strokeStyle = ink; c.lineWidth = 1.2; c.stroke();
     c.globalAlpha = 0.25; c.beginPath(); c.moveTo(cx, y0 + 6); c.lineTo(cx, y0 + size - 6); c.moveTo(x0 + 6, cy); c.lineTo(x0 + size - 6, cy); c.stroke(); c.restore();

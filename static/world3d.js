@@ -11,11 +11,14 @@ const W3 = (() => {
   // Black and white, wireframe with the shading kept: faces are grey Lambert surfaces (lit by a sun and a sky), every crease and outline is a thin line in the opposite tone,
   // and the surface textures (windows, roof ridges, road markings) are drawn as lines too. dark: white lines on a black world; light: ink lines on paper.
   const PAL = {
-    dark: { top: 0x000000, mid: 0x050505, hor: 0x1c1c1c, sun: 0xffffff, sunI: 1.9, hemiS: 0xbdbdbd, hemiG: 0x242424, hemiI: 0.62, fog: 0x1c1c1c, water: 0x080808,
-            tDark: 0.7, oDark: 0.62, eTint: 0xf2f2f2, eAmt: 0.92, txA: 0.5, grid: 0xe4e4e4, g1: 0.07, g2: 0.20, mk: 0.9, road: 0.035, walk: 0.20, ink: 0xf2f2f2 },
+    dark: { top: 0x000000, mid: 0x050505, hor: 0x1c1c1c, sun: 0xffffff, sunI: 1.5, hemiS: 0xbdbdbd, hemiG: 0x242424, hemiI: 0.62, fog: 0x1c1c1c, water: 0x080808,
+            tDark: 0.62, oDark: 0.55, eTint: 0xbfc4cc, eAmt: 0.5, txA: 0.28, grid: 0xaab0b8, g1: 0.045, g2: 0.12, mk: 0.55, road: 0.05, walk: 0.16, ink: 0xbfc4cc },
     light: { top: 0xcfcfcf, mid: 0xe2e2e2, hor: 0xf4f4f4, sun: 0xffffff, sunI: 1.9, hemiS: 0xffffff, hemiG: 0xb0b0b0, hemiI: 1.0, fog: 0xf2f2f2, water: 0xd8d8d8,
-             tDark: 1.1, oDark: 1.12, eTint: 0x0e0e0e, eAmt: 0.92, txA: 0.5, grid: 0x141414, g1: 0.07, g2: 0.20, mk: 0.9, road: 0.50, walk: 0.98, ink: 0x0e0e0e },
+             tDark: 1.15, oDark: 1.18, eTint: 0x4a4f57, eAmt: 0.5, txA: 0.28, grid: 0x50555d, g1: 0.045, g2: 0.12, mk: 0.55, road: 0.60, walk: 0.98, ink: 0x4a4f57 },
   };
+  // the quad wears the app's own sequential colormap (the spectrogram's), so it stands out from the grey world
+  const seqStops = () => getComputedStyle(document.documentElement).getPropertyValue("--seq").split(",").map(c => new T.Color(c.trim()));
+  const seqAt = (st, g, out) => { const x = Math.max(0, Math.min(1, g)) * (st.length - 1), i = Math.min(st.length - 2, Math.floor(x)); return out.copy(st[i]).lerp(st[i + 1], x - i); };
   const theme = () => document.documentElement.dataset.theme === "light" ? "light" : "dark";
 
   // ---------- geometry helpers: everything is built in three-space (x right, y up, z = −sim y) ----------
@@ -252,21 +255,23 @@ const W3 = (() => {
     });
     quad.scale.setScalar(QS);
     const shadow = new T.Mesh(new T.CircleGeometry(1, 20).rotateX(-Math.PI / 2), new T.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.5, depthWrite: false })); shadow.renderOrder = 1; scene.add(shadow);
-    const wash = pointCloud(1800, true); scene.add(wash.m); wash.m.material.uniforms.scale.value = 700;
+    const NPART = 3600, wash = { P: new Float32Array(NPART * 6), C: new Float32Array(NPART * 6), g: new T.BufferGeometry() };   // the prop wash is drawn as short streaks (tail → head along each particle's velocity)
+    wash.g.setAttribute("position", new T.BufferAttribute(wash.P, 3)); wash.g.setAttribute("color", new T.BufferAttribute(wash.C, 3)); wash.g.setDrawRange(0, 0);
+    wash.m = new T.LineSegments(wash.g, new T.LineBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false })); wash.m.frustumCulled = false; scene.add(wash.m);
     const TRN = 420, TNV = (TRN + 1) * 2, tg_ = new T.BufferGeometry(), trail = { P: new Float32Array(TNV * 3), A: new Float32Array(TNV), C: new Float32Array(TNV * 3), S: new Float32Array(TNV), g: tg_ };   // the trail is a ribbon that always faces the camera: thick next to the quad, thinning and fading to its tail
     { const ix = new Uint16Array(TRN * 6); for (let k = 0; k < TRN; k++) { const a = 2 * k; ix.set([a, a + 1, a + 2, a + 1, a + 3, a + 2], k * 6); } tg_.setIndex(new T.BufferAttribute(ix, 1)); }
     tg_.setAttribute("position", new T.BufferAttribute(trail.P, 3)); tg_.setAttribute("alpha", new T.BufferAttribute(trail.A, 1)); tg_.setAttribute("tint", new T.BufferAttribute(trail.C, 3)); tg_.setAttribute("side", new T.BufferAttribute(trail.S, 1)); tg_.setDrawRange(0, 0);
     trail.m = new T.Mesh(tg_, new T.ShaderMaterial({ transparent: true, depthWrite: false, side: T.DoubleSide, vertexShader: "attribute float alpha; attribute float side; attribute vec3 tint; varying float vA; varying float vS; varying vec3 vC; void main(){ vA=alpha; vC=tint; vS=side; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
       fragmentShader: "varying float vA; varying float vS; varying vec3 vC; void main(){ gl_FragColor=vec4(vC, vA*(1.0-smoothstep(0.5,1.0,abs(vS)))); }" })); trail.m.frustumCulled = false; trail.m.renderOrder = 2; scene.add(trail.m);
     // ---- palette ----
-    let curTheme = "";
+    let curTheme = "", SEQ = seqStops();
     const applyTheme = () => { const th = theme(); if (th === curTheme) return; curTheme = th; const P = PAL[th], dark = th === "dark";
       skyMat.uniforms.top.value.setHex(P.top); skyMat.uniforms.mid.value.setHex(P.mid); skyMat.uniforms.hor.value.setHex(P.hor); skyMat.uniforms.sunC.value.setHex(P.sun).multiplyScalar(dark ? 0.5 : 0.3);
       scene.fog.color.setHex(P.fog); hemi.color.setHex(P.hemiS); hemi.groundColor.setHex(P.hemiG); hemi.intensity = P.hemiI; sun.color.setHex(P.sun); sun.intensity = P.sunI; water.material.color.setHex(P.water);
       const UO = mat.userData.U, UT = matT.userData.U, UW = matW.userData.U;
       UO.uDark.value = P.oDark; UO.uET.value.setHex(P.eTint); UO.uEAmt.value = P.eAmt; UO.uTxA.value = P.txA; UO.uLw.value = 1.0 * Math.min(devicePixelRatio || 1, 2);
       UT.uDark.value = P.tDark; UT.uGrid.value.setHex(P.grid); UT.uG1.value = P.g1; UT.uG2.value = P.g2; UT.uMk.value = P.mk; UT.uRoad.value = P.road; UT.uWalk.value = P.walk; UW.uET.value.setHex(P.ink);
-      frame.forEach(m => m.material.color.setHex(dark ? 0xd5dde6 : 0x20252d)); [fcBlock, camLens, ...leds].forEach(m => m.material.color.setHex(dark ? 0xffffff : 0x111111));
+      SEQ = seqStops(); frame.forEach(m => seqAt(SEQ, dark ? 0.55 : 0.8, m.material.color)); [fcBlock, camLens, ...leds].forEach(m => seqAt(SEQ, 1, m.material.color));
       skirt.material.color.setHex(dark ? 0x0b0b0b : 0xe4e4e4); shadow.material.color.setHex(dark ? 0x000000 : 0x303030); wash.m.material.blending = trail.m.material.blending = dark ? T.AdditiveBlending : T.NormalBlending; };
     // ---- per-frame state ----
     const st = { cam: {}, blade: [0, 0, 0, 0], ptime: 0, parts: [], tr: [], lastT: -1, key: null };
@@ -274,7 +279,7 @@ const W3 = (() => {
     const resize = () => { const w = canvas.clientWidth, h = canvas.clientHeight, dpr = Math.min(devicePixelRatio || 1, 2); if (w === cw && h === ch) return; cw = w; ch = h; renderer.setSize(w, h, false); cam.aspect = w / Math.max(1, h); cam.updateProjectionMatrix();
       if (overlay) { overlay.width = w * dpr; overlay.height = h * dpr; } };
     const qrotV = (q, v) => { const [w, x, y, z] = q; return [(1 - 2 * (y * y + z * z)) * v[0] + 2 * (x * y - w * z) * v[1] + 2 * (x * z + w * y) * v[2], 2 * (x * y + w * z) * v[0] + (1 - 2 * (x * x + z * z)) * v[1] + 2 * (y * z - w * x) * v[2], 2 * (x * z - w * y) * v[0] + 2 * (y * z + w * x) * v[1] + (1 - 2 * (x * x + y * y)) * v[2]]; };
-    const spdCol = new T.Color(), c0 = new T.Color(), tone = g => spdCol.setScalar(curTheme === "dark" ? g : 1 - g);   // brightness 0…1 against the world: light on dark, ink on paper
+    const spdCol = new T.Color(), c0 = new T.Color(), tone = g => seqAt(SEQ, curTheme === "dark" ? 0.35 + 0.65 * g : 0.45 + 0.55 * g, spdCol);   // brightness 0…1 against the world: light on dark, ink on paper
     const gauss = () => { let u = 0; for (let k = 0; k < 4; k++) u += Math.random(); return (u - 2) * 1.73; };
 
     function draw(t, o, d) {
@@ -297,7 +302,7 @@ const W3 = (() => {
       shadow.scale.setScalar((0.9 + hgt * 0.06) * QS * 0.45); shadow.material.opacity = 0.3 / (1 + hgt / 10);
       // wash particles: air pushed out along each prop's thrust axis (visual space: the quad is drawn QS× bigger, so the jet is too)
       const PS = st.parts, vq = (() => { const i0 = Math.max(0, i - 1), i1 = Math.min(n - 1, i + 1), fs = n / d.dur; return [0, 1, 2].map(k => (d.pos[k][i1] - d.pos[k][i0]) * fs / Math.max(1, i1 - i0)); })();
-      const zb = qrotV(q, [0, 0, 1]), LIFE = 1.5;
+      const zb = qrotV(q, [0, 0, 1]), LIFE = 0.9;
       const step = (pt, h, TT) => { const [x, y, z] = pt.p, A = 0.9 * Math.min(1, pt.age * 2.5) * (0.3 + pt.th);
         const ed = [Math.sin(1.7 * y + TT * 1.3 + pt.ph) - Math.sin(1.3 * z + TT * 0.9), Math.sin(1.5 * z + TT * 1.1 + pt.ph) - Math.sin(1.9 * x + TT * 1.5), Math.sin(1.6 * x + TT * 0.7) - Math.sin(1.4 * y + TT * 1.2 + pt.ph)];
         const sp = Math.hypot(...pt.v), dr = Math.exp(-h * (1.4 + 0.12 * sp)), sig = (0.3 + 2.0 * pt.age) * Math.sqrt(h);
@@ -305,27 +310,30 @@ const W3 = (() => {
       if (o.particles && dtLog > 0) {
         st.ptime += dtLog;
         for (let k = PS.length - 1; k >= 0; k--) { const pt = PS[k]; pt.age += dtLog; if (pt.age > LIFE) { PS.splice(k, 1); continue; } step(pt, dtLog, st.ptime); }
-        MPOS3.forEach(([x, y], m) => { const th = Math.max(0, Math.min(1, mp[m] / 100)) ** 1.4, nNew = Math.floor((50 + 420 * th) * dtLog + Math.random());
-          for (let k = 0; k < nNew && PS.length < 1800; k++) { const a = Math.random() * 2 * Math.PI, r = (0.2 + Math.random() * 0.7) * 0.0889, jet = 9 * Math.sqrt(th) * (0.8 + Math.random() * 0.4) * QS * 0.5, sw = SPIN3[m] * 0.4 * jet;
+        MPOS3.forEach(([x, y], m) => { const th = Math.max(0, Math.min(1, mp[m] / 100)) ** 1.4, nNew = Math.floor((20 + 1100 * th) * dtLog + Math.random());
+          for (let k = 0; k < nNew && PS.length < NPART; k++) { const a = Math.random() * 2 * Math.PI, r = (0.2 + Math.random() * 0.7) * 0.0889, jet = 34 * Math.pow(th, 0.75) * (0.75 + Math.random() * 0.5) * QS * 0.5 + 1.5, sw = SPIN3[m] * 0.4 * jet;
             const lp = qrotV(q, [(x + r * Math.cos(a)) * QS, (y + r * Math.sin(a)) * QS, -0.01 * QS]), tg = qrotV(q, [-Math.sin(a) * sw, Math.cos(a) * sw, 0]);
-            const pt = { p: [P[0] + lp[0], P[1] + lp[1], P[2] + lp[2]], age: 0, th, ph: Math.random() * 6.28, v: [0, 1, 2].map(c => vq[c] - zb[c] * jet + tg[c] + (Math.random() - 0.5) * 0.3) };
+            const pt = { p: [P[0] + lp[0], P[1] + lp[1], P[2] + lp[2]], age: 0, th, ph: Math.random() * 6.28, v: [0, 1, 2].map(c => vq[c] - zb[c] * jet + tg[c] + (Math.random() - 0.5) * (0.6 + 3 * th)) };
             const fb = Math.random() * dtLog; for (let c = 0; c < 3; c++) pt.p[c] -= vq[c] * fb; pt.age = fb; step(pt, fb, st.ptime); PS.push(pt); } });
       } else if (!o.particles) PS.length = 0;
       const dark = curTheme === "dark";
-      for (let k = 0; k < PS.length; k++) { const pt = PS[k], life = 1 - pt.age / LIFE, b = k * 3; wash.P[b] = pt.p[0]; wash.P[b + 1] = pt.p[2]; wash.P[b + 2] = -pt.p[1];
-        wash.S[k] = (0.07 + 0.2 * (1 - life)) * QS * 0.5; wash.A[k] = Math.max(0, life * life * (dark ? 0.4 : 0.3)) * (o.cam === "flight" ? 0.35 : 1); wash.C[b] = wash.C[b + 1] = wash.C[b + 2] = dark ? 0.85 : 0.08; }
-      wash.g.setDrawRange(0, PS.length); for (const a of ["position", "size", "alpha", "tint"]) wash.g.attributes[a].needsUpdate = true;
+      { const bg = dark ? 0 : 1, cl = dark ? 0.92 : 0.12, vis = o.cam === "flight" ? 0.35 : 1;
+        for (let k = 0; k < PS.length; k++) { const pt = PS[k], life = 1 - pt.age / LIFE, b = k * 6, sp = Math.hypot(pt.v[0] - vq[0], pt.v[1] - vq[1], pt.v[2] - vq[2]) || 1, L = Math.min(0.5 * QS, 0.012 * sp * QS + 0.03), f = Math.max(0, life) * (0.35 + 0.65 * pt.th) * vis;
+          wash.P[b] = pt.p[0]; wash.P[b + 1] = pt.p[2]; wash.P[b + 2] = -pt.p[1];
+          wash.P[b + 3] = pt.p[0] - (pt.v[0] - vq[0]) / sp * L; wash.P[b + 4] = pt.p[2] - (pt.v[2] - vq[2]) / sp * L; wash.P[b + 5] = -(pt.p[1] - (pt.v[1] - vq[1]) / sp * L);
+          const hc = bg + (cl - bg) * f * 0.75, tc = bg + (cl - bg) * f * 0.1; wash.C[b] = wash.C[b + 1] = wash.C[b + 2] = hc; wash.C[b + 3] = wash.C[b + 4] = wash.C[b + 5] = tc; }
+        wash.g.setDrawRange(0, PS.length * 2); wash.g.attributes.position.needsUpdate = true; wash.g.attributes.color.needsUpdate = true; }
       // trail: the last ~3.5 s of the path
       const TR = st.tr; if (o.trail) { if (dtLog > 0 && (!TR.length || Math.hypot(P[0] - TR[TR.length - 1][0], P[1] - TR[TR.length - 1][1], P[2] - TR[TR.length - 1][2]) > 0.3)) { TR.push([P[0], P[1], P[2], t]); } while (TR.length && (t - TR[0][3] > 4 || TR.length > TRN - 1)) TR.shift(); } else TR.length = 0;
-      c0.setScalar(dark ? 0.8 : 0.08);
+      seqAt(SEQ, dark ? 0.7 : 0.7, c0);
       { const nP = TR.length + 1, V = new Array(nP), cp = cam.position;   // points in three space, the head last (joined to the quad)
         for (let k = 0; k < nP; k++) V[k] = k < TR.length ? [TR[k][0], TR[k][2], -TR[k][1]] : [P[0], P[2], -P[1]];
         for (let k = 0; k < nP; k++) {
           const a = k < TR.length ? Math.max(0, 1 - (t - TR[k][3]) / 4) : 1, p0 = V[Math.max(0, k - 1)], p1 = V[Math.min(nP - 1, k + 1)], tx = p1[0] - p0[0], ty = p1[1] - p0[1], tz = p1[2] - p0[2],
             vx = cp.x - V[k][0], vy = cp.y - V[k][1], vz = cp.z - V[k][2];
-          let sx = ty * vz - tz * vy, sy = tz * vx - tx * vz, sz = tx * vy - ty * vx; const sl = Math.hypot(sx, sy, sz) || 1, w = (0.03 + 0.2 * a * a) * (QS / 5) * 2.2 / 2 / sl; sx *= w; sy *= w; sz *= w;   // half-width in metres: 0.39 m at the quad, 0.05 m at the tail
+          let sx = ty * vz - tz * vy, sy = tz * vx - tx * vz, sz = tx * vy - ty * vx; const sl = Math.hypot(sx, sy, sz) || 1, w = (0.02 + 0.09 * a * a) * (QS / 5) * 2.2 / 2 / sl; sx *= w; sy *= w; sz *= w;   // half-width in metres: 0.39 m at the quad, 0.05 m at the tail
           for (let s = 0; s < 2; s++) { const v = 2 * k + s, b = v * 3, sg = s ? 1 : -1; trail.P[b] = V[k][0] + sx * sg; trail.P[b + 1] = V[k][1] + sy * sg; trail.P[b + 2] = V[k][2] + sz * sg; trail.S[v] = sg;
-            trail.A[v] = k < TR.length ? a * 0.9 : 0.95; trail.C[b] = trail.C[b + 1] = trail.C[b + 2] = c0.r; } }
+            trail.A[v] = k < TR.length ? a * 0.4 : 0.5; trail.C[b] = c0.r; trail.C[b + 1] = c0.g; trail.C[b + 2] = c0.b; } }
         trail.g.setDrawRange(0, TR.length ? (nP - 1) * 6 : 0); for (const a of ["position", "alpha", "tint", "side"]) trail.g.attributes[a].needsUpdate = true; }
       // ---- camera ----
       const cs = st.cam, fx = qrotV(q, [1, 0, 0]), heading = Math.atan2(fx[1], fx[0]), ground = (x, y) => Math.max(H(x, y), W.topAt(x, y) > -1e8 ? W.topAt(x, y) : -1e9);

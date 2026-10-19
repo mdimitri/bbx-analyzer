@@ -27,10 +27,17 @@ async function renderPlan() {
             ${it.user ? `<button class="btn sm ghost puser" data-user="${it.user}">use the automatic proposal instead</button>` : ""}</div>
             ${it.why ? `<div class="pwhy">${esc(it.why)}</div>` : ""}${it.note ? `<div class="pnote">${esc(it.note)}</div>` : ""}
             ${has ? `<div class="pcli">${it.cli.map(([k, v]) => `<code>${esc(k)} = ${esc(v)}</code>`).join("")}</div>` : ""}</div></div>`; }).join("")}</section>`; }).join("");
+  const rows = [], seenK = new Set(), kh = S.keyH || {};
+  items.filter(it => it.on && it.cli).forEach(it => it.cli.forEach(([k, v]) => { if (seenK.has(k)) return; seenK.add(k);
+    rows.push(`<tr><td><code>${esc(k)}</code></td><td>${esc(kh[k] ?? "–")}</td><td class="pnew">${esc(v)}</td><td>${esc(it.text)}</td></tr>`); }));
+  const nSteps = new Set(items.filter(it => it.on && it.cli && it.cli.length).map(it => it.step)).size;
+  const head = `<div class="phead"><div class="phl">${rows.length ? `${rows.length} setting${rows.length > 1 ? "s" : ""} to change in ${nSteps} step${nSteps > 1 ? "s" : ""}` : "No setting changes ticked"}</div>
+    ${rows.length ? `<table class="ptab"><tr><th>Setting</th><th>Now</th><th>Suggested</th><th>Why</th></tr>${rows.join("")}</table>` : ""}
+    <div class="hint">Details by step below · untick anything you disagree with</div></div>`;
   $("findings").innerHTML = `<div class="plan">
-    <div class="pcol">${P.notes.length ? `<div class="pnotes">${P.notes.map(n => `<div>⚠ ${esc(n)}</div>`).join("")}</div>` : ""}${stepHTML}</div>
+    <div class="pcol">${head}${P.notes.length ? `<div class="pnotes">${P.notes.map(n => `<div>⚠ ${esc(n)}</div>`).join("")}</div>` : ""}${stepHTML}</div>
     <aside class="pside"><div class="fh">CLI for the ticked items</div>
-      ${cli.length > 1 ? `<pre class="cli" id="planCli">${esc(cli.join("\n"))}</pre><button class="btn sm" id="planCopy">Copy CLI</button>`
+      ${cli.length > 1 ? `<details><summary class="hint">show CLI block</summary><pre class="cli" id="planCli">${esc(cli.join("\n"))}</pre></details><button class="btn sm" id="planCopy">Copy CLI</button>`
         : `<div class="hint">Nothing ticked that changes a setting.</div>`}
       <div class="hint" style="margin-top:6px">Paste into the Betaflight CLI tab. Typing exact PID values turns the simplified-tuning sliders off.</div>
       <div class="fh" style="margin-top:14px">Next test flight</div><ol class="pchecklist">${P.checklist.map(c => `<li>${esc(c)}</li>`).join("")}</ol></aside></div>`;
