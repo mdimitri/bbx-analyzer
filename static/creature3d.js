@@ -64,14 +64,17 @@ const CR3 = (() => {
           const lx = Math.sin(t * 0.9 + seed * 9) * 0.5, ly = Math.sin(t * 1.3 + seed * 5) * 0.4; iris.position.set(r * 0.85, ly * r * 0.28, lx * r * 0.45); pupil.position.set(r * 1.38, ly * r * 0.36, lx * r * 0.55);
           brow.rotation.x = z * (mood * 1.1 + 0.18 * Math.sin(t * 1.7 + seed * 11)); brow.position.y = r * (2.0 + 0.25 * Math.sin(t * 0.8 + seed * 3)); });
         return eg; } const g = new T.Group(), op = o.op != null ? o.op : translucent ? 0.62 : null, mt = new T.MeshStandardMaterial({ color: col, flatShading: true, roughness: L.metal ? 0.38 : 0.72, metalness: L.metal ? 0.7 : 0.05, side: o.double ? T.DoubleSide : T.FrontSide, transparent: op != null, opacity: op ?? 1, emissive: o.glow ? col : 0x000000, emissiveIntensity: o.glow ? 0.9 : 0 });
-      g.add(new T.Mesh(geo, mt)); if (!o.noEdge) g.add(new T.LineSegments(new T.EdgesGeometry(geo, o.ang ?? 22), new T.LineBasicMaterial({ color: C.edge, transparent: true, opacity: o.eo ?? 0.85 }))); return g; };
+      if (o.wire !== false && !o.plain && !o.glow) { mt.polygonOffset = true; mt.polygonOffsetFactor = 1; mt.polygonOffsetUnits = 1; }
+      g.add(new T.Mesh(geo, mt)); if (o.wire !== false && !o.plain && !o.glow) g.add(new T.Mesh(geo, new T.MeshBasicMaterial({ color: C.edge, wireframe: true, transparent: true, opacity: o.wo ?? 0.11, depthWrite: false }))); if (!o.noEdge) g.add(new T.LineSegments(new T.EdgesGeometry(geo, o.ang ?? 22), new T.LineBasicMaterial({ color: C.edge, transparent: true, opacity: o.eo ?? 0.85 }))); return g; };
     const place = (g, x, y, z, sx, sy, sz) => { g.position.set(x, y, z); if (sx !== undefined) g.scale.set(sx, sy ?? sx, sz ?? sx); return g; };
-    const ell = (sx, sy, sz, col, o = {}) => place(mesh(new T.IcosahedronGeometry(1, (o.d ?? 1) + 1), col, { ang: 12, ...o }), 0, 0, 0, sx, sy, sz);   // one subdivision finer than before: 2-4x the faces
-    const fine = n => n <= 3 ? 6 : Math.min(14, n * 2), cone = (r, h, seg = 5, col = C.body, o = {}) => mesh(new T.ConeGeometry(r, h, fine(seg), 3), col, { ang: 30, ...o }), cyl = (r1, r2, h, seg = 6, col = C.body, o = {}) => mesh(new T.CylinderGeometry(r1, r2, h, fine(seg), 2), col, { ang: 30, ...o }), box = (sx, sy, sz, col = C.body, o = {}) => mesh(new T.BoxGeometry(sx, sy, sz), col, o);
+    // one mesh density everywhere: every part is subdivided to the same target edge length E (in model units), so a neck, a wing and a head carry the same number of polygons per unit of surface
+    const E = 0.09, nA = (m, k = 1) => Math.max(1, Math.ceil(m * k / E)), ells = [];
+    const ell = (sx, sy, sz, col, o = {}) => { const m = Math.max(sx, sy, sz), g = place(mesh(new T.IcosahedronGeometry(1, o.d < 0 ? 0 : Math.min(10, nA(m, 1.05) - 1)), col, { ang: 1, wire: false, ...o }), 0, 0, 0, sx, sy, sz); ells.push({ g, sx, sy, sz }); return g; };
+    const fine = n => n <= 3 ? 6 : Math.min(14, n * 2), rad = r => Math.max(6, Math.min(20, Math.round(2 * Math.PI * r / E))), cone = (r, h, seg = 5, col = C.body, o = {}) => mesh(new T.ConeGeometry(r, h, rad(r), Math.min(14, nA(h))), col, { ang: 30, ...o }), cyl = (r1, r2, h, seg = 6, col = C.body, o = {}) => mesh(new T.CylinderGeometry(r1, r2, h, rad(Math.max(r1, r2)), Math.min(14, nA(h))), col, { ang: 30, ...o }), box = (sx, sy, sz, col = C.body, o = {}) => mesh(new T.BoxGeometry(sx, sy, sz, Math.min(8, nA(sx)), Math.min(8, nA(sy)), Math.min(8, nA(sz))), col, o);
     const UPV = new T.Vector3(0, 1, 0);
     // a limb is a pivot at its start joint holding the cylinder out to its end; build() later links end-to-start limbs into chains and gives legs a gait and tails a wag
     const joints = [];
-    const limb = (a, b, r0, r1, col, o = {}) => { const d = new T.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length() || 1e-3; const g = mesh(new T.CylinderGeometry(r1, r0, len, 14, 2), col, { noEdge: o.noEdge ?? true, ...o });
+    const limb = (a, b, r0, r1, col, o = {}) => { const d = new T.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), len = d.length() || 1e-3; const g = mesh(new T.CylinderGeometry(r1, r0, len, Math.max(6, Math.min(16, Math.round(2 * Math.PI * Math.max(r0, r1) / E))), Math.min(14, nA(len))), col, { noEdge: o.noEdge ?? true, ...o });
       g.position.set(d.x / 2, d.y / 2, d.z / 2); g.quaternion.setFromUnitVectors(UPV, d.clone().normalize()); const pv = new T.Group(); pv.position.set(a[0], a[1], a[2]); pv.add(g); root.add(pv);
       joints.push({ pv, a, b, len, r0, r1, col, order: joints.length, kids: [], par: null, dir: [d.x / len, d.y / len, d.z / len] }); return pv; };
     // a wing outline (span along +z, chord along +x), as a flat shape
@@ -89,7 +92,7 @@ const CR3 = (() => {
     const subdiv = (geo, n) => { let g = geo.index ? geo.toNonIndexed() : geo; for (let k = 0; k < n; k++) { const p = g.attributes.position.array, out = []; for (let i = 0; i < p.length; i += 9) { const A = [p[i], p[i + 1], p[i + 2]], B = [p[i + 3], p[i + 4], p[i + 5]], Cc = [p[i + 6], p[i + 7], p[i + 8]], m = (u, v) => [(u[0] + v[0]) / 2, (u[1] + v[1]) / 2, (u[2] + v[2]) / 2], AB = m(A, B), BC = m(B, Cc), CA = m(Cc, A);
           [[A, AB, CA], [AB, B, BC], [CA, BC, Cc], [AB, BC, CA]].forEach(t => t.forEach(v => out.push(...v))); } g = new T.BufferGeometry(); g.setAttribute("position", new T.Float32BufferAttribute(out, 3)); g.computeVertexNormals(); } return g; };
     const addWing = (px, py, pz, side, kind, s, ch, col, o = {}) => {
-      const pivot = new T.Group(); pivot.position.set(px, py, pz); const geo = subdiv(outline(kind, s, ch), 2); owned.push(geo);
+      const pivot = new T.Group(); pivot.position.set(px, py, pz); const g0 = outline(kind, s, ch); let me = 0; { const q = g0.attributes.position, ix = g0.index; for (let i = 0; i < ix.count; i += 3) for (let k = 0; k < 3; k++) { const a = ix.getX(i + k), b = ix.getX(i + (k + 1) % 3); me = Math.max(me, Math.hypot(q.getX(a) - q.getX(b), q.getY(a) - q.getY(b), q.getZ(a) - q.getZ(b))); } } const geo = subdiv(g0, Math.max(2, Math.min(5, Math.ceil(Math.log2(me / (E * 1.5)))))); owned.push(geo);
       const m = mesh(geo, col, { double: true, op: o.op, noEdge: true }); m.scale.z = side; pivot.add(m);
       const base = geo.attributes.position.array.slice(), parts = [{ attr: geo.attributes.position, base, sc: true }];
       const lineOf = (pts, loop, opacity, seg) => { const g = new T.BufferGeometry().setFromPoints(pts); owned.push(g); const L_ = seg ? new T.LineSegments(g, new T.LineBasicMaterial({ color: C.edge, transparent: true, opacity })) : new (loop ? T.LineLoop : T.Line)(g, new T.LineBasicMaterial({ color: C.edge, transparent: true, opacity })); L_.frustumCulled = false; pivot.add(L_); parts.push({ attr: g.attributes.position, base: g.attributes.position.array.slice(), sc: false }); return L_; };
@@ -106,13 +109,14 @@ const CR3 = (() => {
         parts.forEach(pt => { const arr = pt.attr.array, b = pt.base; for (let i = 0; i < pt.attr.count; i++) { const u = Math.min(1, Math.abs(b[i * 3 + 2]) / s), u2 = u * u;
           arr[i * 3 + 1] = b[i * 3 + 1] + k * (u2 * (c1 + 0.25 * c2) * 0.55) - 0.05 * ch * u * Math.sin(p);                          // the tip lags the beat
           arr[i * 3] = b[i * 3] - 0.12 * ch * u2 * c1; } pt.attr.needsUpdate = true; }); };
-      wings.push({ pivot, side, amp: o.amp ?? 0.8, ph: o.ph ?? 0, tw: o.tw ?? 0.25, flex }); return pivot; };
+      wings.push({ kind, s, ch, pivot, side, amp: o.amp ?? 0.8, ph: o.ph ?? 0, tw: o.tw ?? 0.25, flex }); return pivot; };
     const wingPair = (px, py, pz, kind, s, ch, col, o) => { addWing(px, py, pz, 1, kind, s, ch, col, o); addWing(px, py, -pz, -1, kind, s, ch, col, o); };
     const tailChain = (n, len, r0, col, y = 0, x0 = -0.8, wag = 0.5) => { const segs = []; let par = root;
-      for (let i = 0; i < n; i++) { const seg = new T.Group(); seg.position.set(i ? -len : x0, i ? 0 : y, 0); const m = mesh(new T.ConeGeometry(r0 * (1 - i / (n + 1)), len * 1.15, 5).rotateZ(Math.PI / 2).translate(-len * 0.5, 0, 0), col); seg.add(m); par.add(seg); segs.push(seg); par = seg; }
+      for (let i = 0; i < n; i++) { const seg = new T.Group(); seg.position.set(i ? -len : x0, i ? 0 : y, 0); const m = mesh(new T.ConeGeometry(r0 * (1 - i / (n + 1)), len * 1.15, rad(r0), Math.min(10, nA(len * 1.15))).rotateZ(Math.PI / 2).translate(-len * 0.5, 0, 0), col); seg.add(m); par.add(seg); segs.push(seg); par = seg; }
       ticks.push(t => segs.forEach((s, i) => { s.rotation.y = Math.sin(t * 2.2 - i * 0.55) * wag * 0.35; s.rotation.z = Math.sin(t * 1.7 - i * 0.5) * 0.12; })); return segs; };
-    const K = { T, C, root, owned, ticks, wings, tips, heads, mesh, place, ell, cone, cyl, box, limb, wingPair, addWing, tailChain, hsl };
+    const K = { ells, T, C, root, owned, ticks, wings, tips, heads, mesh, place, ell, cone, cyl, box, limb, wingPair, addWing, tailChain, hsl };
     const arch = CR_ARCH[L.a] || CR_ARCH.spirit; arch(K, L.a in CR_ARCH ? L : { ...L, kind: "wisp" }, c);
+    if (typeof CR_DETAIL === "function") CR_DETAIL(K, L, c, window.CR_DETAIL_LEVEL ?? 3);
     root.userData.owned = owned;
     const gait = { w: 6, amp: 0.45, gal: 0 };
     animateLimbs(K, joints, gait);

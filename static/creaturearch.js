@@ -143,7 +143,7 @@ const CR_ARCH = (() => {
     for (let n = 0; n < necks; n++) { const sd = hyd ? (n - 1) : 0, pts = [[0.85, 0.15, 0], [1.2 + 0.1 * n, 0.3, sd * 0.18], [1.5, 0.55 + 0.12 * n, sd * 0.4], [1.8, 0.7 + 0.1 * (n % 2), sd * 0.55]], seg = [];
       const grp = new T.Group(); root.add(grp);
       for (let i = 0; i < pts.length - 1; i++) limb2b(K, grp, pts[i], pts[i + 1], 0.24 - i * 0.04 - (hyd ? 0.05 : 0), 0.2 - i * 0.04 - (hyd ? 0.05 : 0), C.body);
-      const hp = pts[3], hg = new T.Group(); hg.position.set(hp[0], hp[1], hp[2]); grp.add(hg); const H = (g, x, y, z, rz) => { hg.add(place(g, x, y, z)); if (rz) g.rotation.z = rz; return g; };
+      const hp = pts[3], hg = new T.Group(); hg.position.set(hp[0], hp[1], hp[2]); grp.add(hg); (K.dragonHeads ||= []).push(hg); const H = (g, x, y, z, rz) => { hg.add(place(g, x, y, z)); if (rz) g.rotation.z = rz; return g; };
       const hs = drake ? 1.35 : hyd ? 0.85 : 1;
       H(ell(0.3 * hs, 0.16 * hs, 0.17 * hs, C.body), 0, 0, 0); H(ell(0.3 * hs, 0.1 * hs, 0.12 * hs, C.body), 0.3 * hs, -0.03, 0); const jaw = H(ell(0.28 * hs, 0.05 * hs, 0.09 * hs, C.pale), 0.28 * hs, -0.1 * hs, 0);
       for (let i = 0; i < 4; i++) both(s2 => H(cone(0.012, 0.05, 3, C.pale, { noEdge: true }), 0.15 * hs + i * 0.08 * hs, -0.075 * hs, s2 * 0.06 * hs));

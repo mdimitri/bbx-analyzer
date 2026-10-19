@@ -3,6 +3,17 @@
 Every release lists what changed for pilots first, then fixes. Screenshots, the banner and `docs/sample-report.pdf` are
 regenerated from the app for every release (`python tools/release.py all`).
 
+## 2.8.0 · 2026-10-19
+
+**Changed**
+- **Avatar creatures get a full detail layer (level 3):** nostrils, a separate lower jaw and tongue, cheek patches and ear frills on the heads; teeth, ringed horns and a forked tongue on dragons; arm and finger bones with knuckles and a wing claw on every winged creature; coverts and hinged primary feathers on feathered wings; belly plates, haunch muscle and a neck ruff.
+- **Skin and plumage:** overlapping feathers on birds and eagle-headed creatures, scales on dragons and fish, fur tufts on other four-legged bodies, laid over the body surface.
+- **More life:** the chest breathes, the plumage and scales ruffle, primary feathers fan out in a cascade behind each wing beat, the lower jaw chirps and the dragon's tongue flicks and flares.
+- **Uniform mesh density:** every part (body, neck, limbs, tail, wings, horns, claws) is now subdivided to the same target edge length, so necks and wings carry as many polygons per area as heads. A faint wire overlay shows the mesh on cylinders, cones and wings as well.
+
+**Notes**
+- The detail layer lives in `static/creaturedetail.js`; `window.CR_DETAIL_LEVEL` (0-3, default 3) switches it. Archetypes without a rigid main body (spirits, craft, insects, humanoids, squid) get the wing, limb and density upgrades but no skin layer yet.
+
 ## 2.7.1 · 2026-10-19
 
 **Changed**
