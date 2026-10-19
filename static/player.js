@@ -183,7 +183,7 @@ function mountViewer() {
   const SH = [["body", "Body & arms"], ["props", "Props"], ["labels", "Motor labels"], ["thrust", "Thrust bars"], ["grid", "Ground grid"], ["axes", "Body axes"],
               ["hud", "Rate HUD"], ["acc", "Shake vector"], ["legend", "Speed legend"]];
   el.innerHTML = `<div class="viewer"><canvas id="v3d" aria-label="Animated 3D quad attitude"></canvas>
-    <div class="vpanel">
+    <details class="vctl" id="vctl"${store.get("vctlOpen", false) ? " open" : ""}><summary>Viewer controls</summary><div class="vpanel">
       <div class="vrow"><span data-tip="v_src">Rotation from</span>${seg("vsrc", [["filt", "Filtered gyro"], ["raw", "Raw gyro"]], VS.src)}</div>
       <div class="vrow"><span data-tip="v_cam">Camera</span>${seg("vcam", [["heading", "Follow heading"], ["world", "World"], ["chase", "3rd person"], ["flight", "Flight path"]], VS.cam)}<button id="vreset" class="btn sm ghost">Reset view</button></div>
       <label class="vrow"><span data-tip="v_wobble">Wobble <b id="vwobV">${fmtG(VS.wobble)}</b></span><input id="vwob" type="range" min="0" max="4" step="0.01" value="${posOf(VS.wobble)}"></label>
@@ -192,7 +192,8 @@ function mountViewer() {
       <div class="vrow"><span class="hint" id="vscale">1× = true size on a ${craftInch()}″ (${wheelbaseMM()} mm) quad</span><button id="vreal" class="btn sm ghost" data-tip="v_real">1× real</button></div>
       <div class="vrow col"><span data-tip="v_show">Show</span><span class="chips" id="vshow">${SH.map(([k, l]) => chip(k, l, VS.show[k])).join("")}</span></div>
       <div class="hint">drag to turn the view · scroll to zoom · double-click resets</div>
-    </div></div>`;
+    </div></details></div>`;
+  $("vctl").ontoggle = () => { store.set("vctlOpen", $("vctl").open); typeof fitViewer === "function" && fitViewer(); };
   $("vsrc").onclick = e => { const v = e.target.dataset.v; if (v) { VS.src = v; saveVS(); for (const id of ["vsrc", "pbsrc"]) if ($(id)) [...$(id).children].forEach(b => b.classList.toggle("on", b.dataset.v === v)); PB.dirty = true; } };
   $("vcam").onclick = e => { const v = e.target.dataset.v; if (v) { VS.cam = v; saveVS(); [...$("vcam").children].forEach(b => b.classList.toggle("on", b.dataset.v === v)); PB.dirty = true; } };
   const snap = g => Math.abs(g - 1) < 0.06 ? 1 : g;  // magnetic 1× detent

@@ -13,7 +13,7 @@ async function renderPlan() {
   if (S.tab !== "plan") return;
   const P = PLAN.d, st = planState();
   Plotly.purge("main"); $("main").style.height = "0px";
-  $("controls").innerHTML = tbar(`<h3 data-tip="tab_plan">Tune plan</h3><span class="hint">everything the analyses suggest, in the order to change it · tick what you want · one CLI block at the end</span>
+  $("controls").innerHTML = tbar(`<h3 data-tip="tab_plan">Tune plan</h3><span class="hint">what to do, in order · filter and PID changes are made in their own tabs</span>
     <span class="tspacer"></span><button class="btn sm" id="planPdf" data-tip="report_pdf">⬇ PDF report</button>`, []);
   $("planPdf").onclick = () => makeReport();
   const items = planItems(P, st), cli = planCli(P, items);
@@ -23,17 +23,18 @@ async function renderPlan() {
       ${its.map(it => { const id = itemId(it), has = it.cli && it.cli.length;
         return `<div class="pitem lv-${it.level} ${has && !it.on ? "off" : ""}">
           ${has ? `<label class="pchk"><input type="checkbox" data-id="${esc(id)}" ${it.on ? "checked" : ""}></label>` : `<span class="pdot" style="background:${LVC(it.level)}"></span>`}
-          <div class="pbody"><div class="ptitle">${esc(it.text)} ${it.tab ? `<a class="plink" data-go="${it.tab}">${esc(TAB_LABEL[it.tab] || it.tab)} →</a>` : ""}
-            ${it.user ? `<button class="btn sm ghost puser" data-user="${it.user}">use the automatic proposal instead</button>` : ""}</div>
+          <div class="pbody"><div class="ptitle">${esc(it.text)} ${it.tab ? `<a class="plink" data-go="${it.tab}">${esc(it.go || TAB_LABEL[it.tab] || it.tab)} →</a>` : ""}
+            </div>
             ${it.why ? `<div class="pwhy">${esc(it.why)}</div>` : ""}${it.note ? `<div class="pnote">${esc(it.note)}</div>` : ""}
             ${has ? `<div class="pcli">${it.cli.map(([k, v]) => `<code>${esc(k)} = ${esc(v)}</code>`).join("")}</div>` : ""}</div></div>`; }).join("")}</section>`; }).join("");
   const rows = [], seenK = new Set(), kh = S.keyH || {};
   items.filter(it => it.on && it.cli).forEach(it => it.cli.forEach(([k, v]) => { if (seenK.has(k)) return; seenK.add(k);
     rows.push(`<tr><td><code>${esc(k)}</code></td><td>${esc(nowVal(k, kh))}</td><td class="pnew">${esc(v)}</td><td class="pw">${esc(it.text)}</td></tr>`); }));
-  const nSteps = new Set(items.filter(it => it.on && it.cli && it.cli.length).map(it => it.step)).size;
-  const head = `<div class="phead"><div class="phl">${rows.length ? `${rows.length} setting${rows.length > 1 ? "s" : ""} to change in ${nSteps} step${nSteps > 1 ? "s" : ""}` : "No setting changes ticked"}</div>
+  const todo = items.filter(it => it.level !== "good").length, nf = items.filter(it => it.step === "filters" && it.level !== "good").length, np = items.filter(it => (it.step === "pids" || it.step === "feel") && it.level !== "good").length;
+  const head = `<div class="phead"><div class="phl">${todo} suggestion${todo === 1 ? "" : "s"}${nf || np ? ` · ${nf} on filters → Noise tab · ${np} on PIDs → PID simulator` : ""}</div>
+    ${rows.length ? `<div class="hint">Settings to change now (logging):</div>` : ""}
     ${rows.length ? `<table class="ptab"><tr><th>Setting</th><th>Now</th><th>Suggested</th><th>Why</th></tr>${rows.join("")}</table>` : ""}
-    <div class="hint">Suggestions by step below · untick anything you disagree with</div></div>`;
+    <div class="hint">Filter and PID suggestions open the tab where you adjust them and get the CLI</div></div>`;
   $("findings").innerHTML = `<div class="plan one">
     <div class="pcol">${head}${stepHTML}
       <details class="pdet"><summary>Details · warnings, CLI block and next test flight</summary>
@@ -52,13 +53,11 @@ function nowVal(k, kh) {
   const m = k.match(/^([pid])_(roll|pitch|yaw)$/); if (m) { const v = String(kh[m[2] + "PID"] || "").split(","); return v["pid".indexOf(m[1])] ?? "–"; }
   const d = k.match(/^d_max_(roll|pitch|yaw)$/); if (d) return String(kh.d_max || "").split(",")[["roll", "pitch", "yaw"].indexOf(d[1])] ?? "–";
   return kh[k] ?? "–"; }
+// filters, PIDs and feedforward are only pointed at here: the changes and their CLI live in the Noise (filter planner) and PID simulator tabs
+const PLAN_GO = { filters: ["noise", "Open the filter planner"], pids: ["pidsim", "Open the PID simulator"], feel: ["pidsim", "Open the PID simulator"] };
 function planItems(P, st = planState()) {
-  let items = P.items.map(it => ({ ...it, on: st.on[itemId(it)] ?? it.on }));
-  if (st.filt) items = items.filter(it => !(it.step === "filters" && it.src === "filter planner"))
-    .concat([{ step: "filters", text: "Your filter-planner choices", why: st.filt.label, cli: st.filt.cli, on: st.on["filters|Your filter-planner choices"] ?? true, level: "info", tab: "noise", src: "you", user: "filt" }]);
-  if (st.pids) items = items.filter(it => !(it.src === "step response" && (it.step === "pids" || it.step === "feel")))
-    .concat([{ step: "pids", text: "Your PID-simulator gains", why: st.pids.label, cli: st.pids.cli, on: st.on["pids|Your PID-simulator gains"] ?? true, level: "info", tab: "pidsim", src: "you", user: "pids" }]);
-  return items;
+  return P.items.map(it => { const g = PLAN_GO[it.step], on = st.on[itemId(it)] ?? it.on;
+    return g ? { ...it, cli: null, on: false, tab: g[0], go: g[1] } : { ...it, on }; });
 }
 const TAB_LABEL = { delay: "Filter delay", summary: "Profile", tracking: "Tracking", pid: "PID terms", motors: "Motors", noise: "Noise", spectro: "Spectrogram", step: "Step response", propwash: "Propwash", pidsim: "PID simulator", health: "Motor health" };
 

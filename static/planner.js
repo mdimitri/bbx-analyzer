@@ -197,8 +197,7 @@ function plannerPanel(d, P) {
         Noise predictions scale the measured spectra by the change in filter response, so they hold for the same flight style and props.</div></div>
     <div>${ncards || `<div class="hint">No resonance needs a notch: the filters already remove ≥ 15 dB at every suspected line, or none was found. Use the manual notch to experiment.</div>`}${rpm}
       <div class="fh" style="margin-top:8px">CLI for this plan</div>
-      ${cli.length ? `<pre class="cli" id="fpCli">${esc(cli.join("\n"))}</pre><button class="btn sm" id="fpSend" data-tip="to_plan">Use in tune plan →</button>` : `<div class="hint">No changes yet: toggle a proposed notch or move a slider.</div>`}
+      ${cli.length ? `<pre class="cli" id="fpCli">${esc(cli.join("\n"))}</pre><button class="btn sm" id="fpSend">Copy CLI</button>` : `<div class="hint">No changes yet: toggle a proposed notch or move a slider.</div>`}
       <div class="hint" style="margin-top:6px">Test any filter change with a short hover and a few punch-outs, then feel the motors. Less filtering means warmer motors.</div></div></div>`;
-  if ($("fpSend")) $("fpSend").onclick = () => { const n = sendToPlan("filt", cli, `From the filter planner: ${[d.notches.filter(x => A.slot[x.id] != null).map(x => x.id + " notch").join(", "), Math.abs(F.gmul - 1) > 0.01 ? "gyro low-pass ×" + F.gmul.toFixed(2) : "", Math.abs(F.dmul - 1) > 0.01 ? "D-term low-pass ×" + F.dmul.toFixed(2) : "", F.man.on ? "manual notch " + Math.round(F.man.f) + " Hz" : "", d.rpm_fix ? "RPM filter fade" : ""].filter(Boolean).join(", ")}.`);
-    $("fpSend").textContent = n ? "In the tune plan ✓" : "Nothing to add"; };
+  if ($("fpSend")) $("fpSend").onclick = () => { navigator.clipboard && navigator.clipboard.writeText(cli.join("\n")); $("fpSend").textContent = "Copied ✓"; };
 }

@@ -3,6 +3,13 @@
 Every release lists what changed for pilots first, then fixes. Screenshots, the banner and `docs/sample-report.pdf` are
 regenerated from the app for every release (`python tools/release.py all`).
 
+## 2.6.2 · 2026-10-19
+
+**Changed**
+- **Tune plan only informs.** Filter and PID suggestions no longer carry CLI here: each one links to the tab where you adjust it (filter planner in Noise, the PID simulator), and those tabs now show and copy their own CLI. Logging settings stay in the plan.
+- **Tracking sub-tabs share one layout:** 3D viewer on the left with its controls folded away (open them with *Viewer controls*), chart in the middle, and *What this shows* in a collapsible rail on the right (collapsed by default). The viewer, which can be switched off, now also appears in *PIDs vs gyro* and *Motors vs RPM*; *Sticks vs gyro* gained a *What this shows* panel with tracking error per axis.
+- **Splash exhaust:** 30% slower, scatters more randomly and slows sharply towards the end of its life.
+
 ## 2.6.1 · 2026-10-19
 
 **Changed**

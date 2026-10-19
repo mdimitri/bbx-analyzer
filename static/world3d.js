@@ -305,13 +305,13 @@ const W3 = (() => {
       const zb = qrotV(q, [0, 0, 1]), LIFE = 0.9;
       const step = (pt, h, TT) => { const [x, y, z] = pt.p, A = 0.9 * Math.min(1, pt.age * 2.5) * (0.3 + pt.th);
         const ed = [Math.sin(1.7 * y + TT * 1.3 + pt.ph) - Math.sin(1.3 * z + TT * 0.9), Math.sin(1.5 * z + TT * 1.1 + pt.ph) - Math.sin(1.9 * x + TT * 1.5), Math.sin(1.6 * x + TT * 0.7) - Math.sin(1.4 * y + TT * 1.2 + pt.ph)];
-        const sp = Math.hypot(...pt.v), dr = Math.exp(-h * (2.6 + 0.18 * sp + 3 * pt.age)), sig = (0.4 + 7.0 * pt.age * pt.age + 3.0 * pt.age) * Math.sqrt(h) * (1 + 0.35 * QS);
-        for (let a = 0; a < 3; a++) { pt.v[a] = pt.v[a] * dr + A * ed[a] * h * 5 + gauss() * sig; pt.p[a] += pt.v[a] * h; } };
+        const sp = Math.hypot(...pt.v), dr = Math.exp(-h * (2.6 + 0.18 * sp + 3 * pt.age + 9 * pt.age ** 3)), sig = (0.6 + 11.0 * pt.age * pt.age + 4.5 * pt.age) * Math.sqrt(h) * (1 + 0.35 * QS), tw = sp * 1.1 * Math.sqrt(h) * (0.25 + pt.age);
+        for (let a = 0; a < 3; a++) { pt.v[a] = pt.v[a] * dr + A * ed[a] * h * 7 + gauss() * (sig + tw); pt.p[a] += pt.v[a] * h; } };
       if (o.particles && dtLog > 0) {
         st.ptime += dtLog;
         for (let k = PS.length - 1; k >= 0; k--) { const pt = PS[k]; pt.age += dtLog; if (pt.age > LIFE) { PS.splice(k, 1); continue; } step(pt, dtLog, st.ptime); }
         MPOS3.forEach(([x, y], m) => { const th = Math.max(0, Math.min(1, mp[m] / 100)) ** 1.4, nNew = Math.floor((20 + 1100 * th) * dtLog + Math.random());
-          for (let k = 0; k < nNew && PS.length < NPART; k++) { const a = Math.random() * 2 * Math.PI, r = (0.2 + Math.random() * 0.7) * 0.0889, jet = 34 * Math.pow(th, 0.75) * (0.75 + Math.random() * 0.5) * QS * 0.5 + 1.5, sw = SPIN3[m] * 0.4 * jet;
+          for (let k = 0; k < nNew && PS.length < NPART; k++) { const a = Math.random() * 2 * Math.PI, r = (0.2 + Math.random() * 0.7) * 0.0889, jet = (34 * Math.pow(th, 0.75) * (0.75 + Math.random() * 0.5) * QS * 0.5 + 1.5) * 0.7, sw = SPIN3[m] * 0.4 * jet;
             const lp = qrotV(q, [(x + r * Math.cos(a)) * QS, (y + r * Math.sin(a)) * QS, -0.01 * QS]), tg = qrotV(q, [-Math.sin(a) * sw, Math.cos(a) * sw, 0]);
             const pt = { p: [P[0] + lp[0], P[1] + lp[1], P[2] + lp[2]], age: 0, th, ph: Math.random() * 6.28, v: [0, 1, 2].map(c => vq[c] - zb[c] * jet + tg[c] + (Math.random() - 0.5) * (0.6 + 3 * th)) };
             const fb = Math.random() * dtLog; for (let c = 0; c < 3; c++) pt.p[c] -= vq[c] * fb; pt.age = fb; step(pt, fb, st.ptime); PS.push(pt); } });

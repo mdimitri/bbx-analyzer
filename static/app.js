@@ -205,7 +205,7 @@ async function renderTS(win) {
   for (let k = 1; k <= titles.length; k++) L[k > 1 ? `yaxis${k}` : "yaxis"].fixedrange = true;
   setTimeAxes([{ axis: "xaxis", dim: "x", pair: null }]);
   $("controls").innerHTML = tbar(`<h3>${$("tabs").querySelector(".on").textContent}</h3>${S.tab === "pid" ? pidvSeg() : ""}<span class="hint" data-tip="time_nav">${T.hint} · drag = move · click the chart, then wheel = zoom · all time charts follow · double-click = whole log</span>
-    ${S.tab === "tracking" ? `<span class="tspacer"></span><span class="chips" id="vtoggle">${chip("v", "3D viewer", S.viewerOn, { tip: "viewer3d" })}</span>` : ""}`,
+    ${TRK3.includes(S.tab) ? `<span class="tspacer"></span><span class="chips" id="vtoggle">${chip("v", "3D viewer", S.viewerOn, { tip: "viewer3d" })}</span>` : ""}`,
     S.tab === "tracking" ? [...trkGroups(), yscGroup()] : S.tab === "pid" ? [pidGyGroup(), yscGroup()] : []);
   bindPidv(); if (S.tab === "tracking") bindTrk(); if (S.tab === "pid") bindPidGy(); if (YSC_TABS.includes(S.tab)) bindYsc();
   if ($("vtoggle")) $("vtoggle").onclick = async () => { S.viewerOn = !S.viewerOn; store.set("viewerOn", S.viewerOn); setupPlayer(); await render();
@@ -214,15 +214,26 @@ async function renderTS(win) {
   const A = T.an ? await tsAnalysis(T.an) : null;
   if (S.tab !== tab0) return;
   if (A && !A.error) tsAnnotate(A, L);
-  else $("findings").innerHTML = A && A.error ? `<div class="hint">${esc(A.error)}</div>` : "";
+  else $("findings").innerHTML = A && A.error ? `<div class="hint">${esc(A.error)}</div>` : S.tab === "tracking" ? trackingInfo(d, r) : "";
+  syncRail();
   const split = document.querySelector(".maincard").classList.contains("split");
   fitMain(split ? 460 : S.tab === "tracking" && S.viewerOn ? 360 : 400);
-  if (split && $("v3d")) { const hMain = parseFloat($("main").style.height), vp = document.querySelector(".vpanel");
-    $("v3d").style.height = Math.max(240, hMain - (vp ? vp.offsetHeight : 0) - 12) + "px"; PB.dirty = true; }
+  fitViewer();
   if (S.tab === "pid" && S.pidGy !== "off") [0, 1, 2].forEach(i => { L[`yaxis${11 + i}`] = { overlaying: i ? `y${i + 1}` : "y", side: "right", showgrid: false, zeroline: false, fixedrange: true,
     tickfont: { size: 9, color: css("--muted") }, title: { text: "°/s", font: { size: 9, color: css("--muted") }, standoff: 2 }, automargin: true }; });
   if (YSC_TABS.includes(S.tab)) applyYsc(L, d, r, titles.length);
   await Plotly.react("main", T.traces(d), L, CFG);
+}
+
+// "What this shows" for Sticks vs gyro: what the chart means, plus how closely the gyro followed the sticks in the window on screen
+function trackingInfo(d, r) {
+  const rows = [0, 1, 2].map(i => { const sp = d[`setpoint[${i}]`], g = d[`gyroADC[${i}]`]; if (!sp || !g) return "";
+    let e = 0, s = 0, n = 0; for (let k = 0; k < d.t.length; k++) if (d.t[k] >= r[0] && d.t[k] <= r[1]) { const x = g[k] - sp[k]; e += x * x; s += sp[k] * sp[k]; n++; }
+    if (!n) return ""; const rm = Math.sqrt(e / n), rs = Math.sqrt(s / n);
+    return `<tr><td><span class="sw" style="background:${axc(i)}"></span>${AX[i]}</td><td>${rm.toFixed(1)} °/s</td><td>${rs > 1 ? Math.max(0, 100 * (1 - rm / rs)).toFixed(0) + "%" : "–"}</td></tr>`; }).join("");
+  return `<div class="fh">What this shows</div>
+    <div class="hint">Dotted = what your sticks asked for (setpoint). Solid = what the quad did (gyro). The closer they sit, the better the quad follows you; a gap that opens on fast moves means lag or too little P/FF, a wobble after a move means overshoot.</div>
+    ${rows ? `<table class="pidt"><tr><th></th><th>Tracking error ▼</th><th>Followed ▲</th></tr>${rows}</table><div class="hint">RMS of gyro − setpoint over the window on screen.</div>` : ""}`;
 }
 
 // ---------- vertical scale for the Tracking and PID-term charts: auto per chart, one shared auto scale, or a fixed ± value ----------
@@ -1229,7 +1240,9 @@ async function renderSummary() {
 }
 
 // ---------- playback wiring ----------
-const PLAYER_TABS = { tracking: { viewer: true, follow: true }, pid: { follow: true }, motors: { follow: true }, health: {} };
+const PLAYER_TABS = { tracking: { viewer: true, follow: true }, pid: { viewer: true, follow: true }, motors: { viewer: true, follow: true }, health: {} };
+const TRK3 = ["tracking", "pid", "motors"];   // chart + 3D viewer on the left, "What this shows" in a collapsible rail on the right
+S.railOpen = store.get("railOpen", false);
 function setupPlayer() {
   if (typeof PB === "undefined" || !S.meta) return;
   const cfg = PLAYER_TABS[S.tab] || {};
@@ -1273,7 +1286,7 @@ const render = () => {
   $("dash").hidden = !(dash || S.tab === "health"); if (!$("dash").hidden) $("dash").innerHTML = ""; $("main").style.display = dash ? "none" : "";
   if (dash) $("findings").innerHTML = "";
   S._flist = [];
-  document.querySelector(".maincard").classList.toggle("side3", SIDE3.includes(S.tab) && innerWidth > 1000);
+  document.querySelector(".maincard").classList.toggle("side3", SIDE3.includes(S.tab) && innerWidth > 1000); syncRail();
   $("findings").style.maxHeight = "";
   renderTips();
   return busy(() => RENDER[S.tab](), TAB_BUSY[S.tab] || "Analysing").then(() => { updateBadge(S.tab, S._flist); if (typeof PB !== "undefined") PB.dirty = true; fitSide(); }).catch(e => console.error(e));
@@ -1282,8 +1295,20 @@ const TAB_BUSY = { delay: "Analysing the filter delay (learns this quad's dynami
   noise: "Analysing noise and filters", spectro: "Computing spectrograms", step: "Computing step responses", propwash: "Finding throttle chops",
   avatar: "Finding your quad's avatar", pidsim: "Preparing the PID simulator", health: "Checking motors and props" };
 const LVORD = { serious: 0, warning: 1, info: 2, good: 3 };
-const SIDE3 = ["step", "pid", "motors", "propwash", "pidsim"];   // chart 2/3 left, findings 1/3 right
-function fitSide() { if (document.querySelector(".maincard.side3")) $("findings").style.maxHeight = $("main").offsetHeight + "px"; }
+const SIDE3 = ["step", "propwash", "pidsim"];   // chart 2/3 left, findings 1/3 right
+function fitSide() { if (document.querySelector(".maincard.side3, .maincard.trk3")) $("findings").style.maxHeight = $("main").offsetHeight + "px"; fitViewer(); }
+function fitViewer() {
+  const split = document.querySelector(".maincard").classList.contains("split");
+  if (!split || !$("v3d")) return;
+  const hMain = parseFloat($("main").style.height) || $("main").offsetHeight, ctl = document.querySelector(".vctl");
+  $("v3d").style.height = Math.max(240, hMain - (ctl ? ctl.offsetHeight : 0) - 12) + "px"; if (typeof PB !== "undefined") PB.dirty = true;
+}
+function syncRail() {
+  const on = TRK3.includes(S.tab) && innerWidth > 1000, mc = document.querySelector(".maincard");
+  mc.classList.toggle("trk3", on); mc.classList.toggle("railoff", on && !S.railOpen);
+  const b = $("railBtn"); b.hidden = !on || !$("findings").innerHTML; b.textContent = S.railOpen ? "Hide ▸" : "What this shows ◂";
+}
+$("railBtn").onclick = () => { S.railOpen = !S.railOpen; store.set("railOpen", S.railOpen); syncRail(); requestAnimationFrame(() => { $("main").data && Plotly.Plots.resize($("main")); fitSide(); }); };
 function updateBadge(tab, list) {
   const b = $("fbadge");
   if (!list || !list.length) { b.hidden = true; return; }
