@@ -16,27 +16,28 @@ After that it's cached as `logs/<name>.<n>.npz` and loads in under half a second
 ## Layout
 | file | what |
 |---|---|
-| `version.py` | the version, single source (API, header badge, PDF, CLI header, launchers check it) |
-| `app.py` | API routes, decode lock, LRU of open logs, `/api/progress`, compiles the simulator kernels at start-up |
-| `bbl.py` | `Log`: decode → numpy columns, units, derived fields, spectrogram, step response; caches (`.npz`, `.sim.json`); `progress()` / `Job` |
-| `fastbbl.py` | specialised blackbox decoder, bit-identical to orangebox, ~4× faster; orangebox is the fallback |
-| `debugmodes.py` | `debug_mode` enum tables per firmware (they differ: FFT_FREQ is 17 in 4.3–4.5, 16 in 2025.x), decoded debug channels |
-| `tuning.py` | Betaflight filter models (PT1/PT2/PT3/biquad/notch/RPM/dyn-notch from the header), noise report, filter planner, step metrics and advice |
-| `delay.py` | Filter delay tab: per-stage delay at the crossover, specs, closed-form explanations, what-ifs, reference setups, margins, sweeps, headroom, self-oscillation check |
-| `flight.py` | PID-term balance, motor-output headroom, propwash after throttle chops, stick-to-motion latency |
-| `sim.py` | PID simulator model: motor lag/delay from eRPM, effective P/D gains from the logged terms, plant fitted by closed-loop output error + frequency response; per-craft memory |
-| `simcore.py` | numba kernels for the simulator's inner loops (optional; bit-identical to the numpy path) |
-| `quad.py` | quad profile: prop size, blade count and all-up weight from the log, size-scaled references, typical dynamics |
-| `motors.py` | motor & prop health: per-motor order tracking, load balance, speed per command, desyncs, battery waste |
-| `plan.py` | tune plan (all findings in order, one CLI), scorecard, before → after comparison, report data |
+| `backend/version.py` | the version, single source (API, header badge, PDF, CLI header, launchers check it) |
+| `backend/app.py` | API routes, decode lock, LRU of open logs, `/api/progress`, compiles the simulator kernels at start-up |
+| `backend/bbl.py` | `Log`: decode → numpy columns, units, derived fields, spectrogram, step response; caches (`.npz`, `.sim.json`); `progress()` / `Job` |
+| `backend/fastbbl.py` | specialised blackbox decoder, bit-identical to orangebox, ~4× faster; orangebox is the fallback |
+| `backend/debugmodes.py` | `debug_mode` enum tables per firmware (they differ: FFT_FREQ is 17 in 4.3–4.5, 16 in 2025.x), decoded debug channels |
+| `backend/tuning.py` | Betaflight filter models (PT1/PT2/PT3/biquad/notch/RPM/dyn-notch from the header), noise report, filter planner, step metrics and advice |
+| `backend/delay.py` | Filter delay tab: per-stage delay at the crossover, specs, closed-form explanations, what-ifs, reference setups, margins, sweeps, headroom, self-oscillation check |
+| `backend/flight.py` | PID-term balance, motor-output headroom, propwash after throttle chops, stick-to-motion latency |
+| `backend/sim.py` | PID simulator model: motor lag/delay from eRPM, effective P/D gains from the logged terms, plant fitted by closed-loop output error + frequency response; per-craft memory |
+| `backend/simcore.py` | numba kernels for the simulator's inner loops (optional; bit-identical to the numpy path) |
+| `backend/quad.py` | quad profile: prop size, blade count and all-up weight from the log, size-scaled references, typical dynamics |
+| `backend/motors.py` | motor & prop health: per-motor order tracking, load balance, speed per command, desyncs, battery waste |
+| `backend/plan.py` | tune plan (all findings in order, one CLI), scorecard, before → after comparison, report data |
 | `static/app.js` | state → fetch → Plotly, tabs, busy/progress panel, tooltips |
 | `static/delay.js`, `plan.js`, `compare.js`, `report.js` | Filter delay tab, Tune plan, Before → after, PDF report (jsPDF + DejaVu fonts in `static/vendor/`) |
 | `static/pidsim.js` | browser-side closed-loop simulation at the PID loop rate, loop margins / sensitivity, auto-suggest |
 | `static/player.js`, `timesync.js`, `video.js` | playback + 3D viewer, synced time navigation, DVR video |
-| `static/creatures.js`, `creaturelooks.js` (per-creature look), `creaturearch.js` (parametric archetypes), `creature3d.js` (Avatar tab: 150 creatures, quad PiP, 8-axis `quadScores`, nearest-match, procedural 3D flier), `static/world.js`, `world3d.js`, `livecharts.js`, `demo.js`, `vendor/three.module.min.js` | the no-log splash: procedural toy world (100 object kinds), its autopilot and tricks, the Three.js renderer, the live plots |
+| `static/creatures.js`, `creaturelooks.js` (per-creature look), `creaturequips.js` (tooltip one-liners: drone voice for the quad, 8×30 templates × a 150-entry lexicon for creatures), `creaturearch.js` (parametric archetypes), `creature3d.js` (Avatar tab: 150 creatures, quad PiP, 8-axis `quadScores`, nearest-match, procedural 3D flier), `static/world.js`, `world3d.js`, `livecharts.js`, `demo.js`, `vendor/three.module.min.js` | the no-log splash: procedural toy world (100 object kinds), its autopilot and tricks, the Three.js renderer, the live plots |
 | `static/planner.js`, `behaviour.js` | filter planner (Noise tab), PID-term behaviour |
 | `static/glossary.js` | tooltip texts (TL;DR + detail) and sidebar grouping |
 | `tools/release.py` | release checks, screenshots / banner / sample report from the app, the zip |
+| `docs/CONTEXT.md` | project notes for contributors (not shipped in the zip) |
 | `tests/` | decoder parity, units, debug modes, filter maths, compiled vs numpy simulator, model cache, all analyses, API |
 
 ## API (`/api/{file}/{sublog}/…`, all take optional `t0,t1` seconds)

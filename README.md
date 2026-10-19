@@ -112,7 +112,7 @@ Python (FastAPI + numpy, numba optional) backend and a vanilla JS + Plotly front
 How the analyses work, and the reasoning behind them, is in **[docs/TECHNICAL.md](docs/TECHNICAL.md)**.
 
 Logs are decoded by `fastbbl.py`, a specialised decoder that gives exactly the same output as orangebox (checked by the tests) about 4× faster; orangebox stays as the fallback. Run the tests with
-`pip install -r requirements-dev.txt` and `python -m pytest tests` (decoder parity on a short real log and every log in `logs/`, truncated and corrupted logs, units, debug-mode tables, filter maths against closed forms and the Betaflight defaults, the compiled simulator against the numpy one, all analyses, the tune plan, the comparison and the web API).
+`pip install -r tests/requirements-dev.txt` and `python -m pytest tests` (decoder parity on a short real log and every log in `logs/`, truncated and corrupted logs, units, debug-mode tables, filter maths against closed forms and the Betaflight defaults, the compiled simulator against the numpy one, all analyses, the tune plan, the comparison and the web API).
 
 **Releasing.** Docs are part of every release: `python tools/release.py all` regenerates the screenshots, the banner and the sample PDF report from the app (demo log), checks that README, CHANGELOG, the launchers and `version.py` agree and that the docs were made from the current code, runs the tests and builds `dist/bbx-analyzer-v<version>.zip`. Add a CHANGELOG entry and bump `version.py` first.
 </details>

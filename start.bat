@@ -100,8 +100,8 @@ echo   BBX Analyzer is starting:  %URL%
 echo   Your browser opens by itself in a moment; if not, copy the address above into it.
 echo   Keep this window open while you use it. Close it to stop BBX.
 echo.
-start "" /b "%VPY%" open_browser.py "%URL%"
-"%VPY%" -m uvicorn app:app --host 127.0.0.1 --port %PORT% --log-level warning
+start "" /b "%VPY%" backend\open_browser.py "%URL%"
+"%VPY%" -m uvicorn app:app --app-dir backend --host 127.0.0.1 --port %PORT% --log-level warning
 echo.
 echo !! BBX stopped. If this happened right away, the message above says why.
 pause

@@ -165,7 +165,7 @@ fi
 # ---------------------------------------------------------------- 5. start the server and open the browser
 while "$VPY" -c "import socket,sys; s=socket.socket(); sys.exit(s.connect_ex(('127.0.0.1',$PORT))!=0)" 2>/dev/null; do PORT=$((PORT + 1)); done
 URL="http://127.0.0.1:$PORT"
-"$VPY" -m uvicorn app:app --host 127.0.0.1 --port "$PORT" --log-level warning &
+"$VPY" -m uvicorn app:app --app-dir backend --host 127.0.0.1 --port "$PORT" --log-level warning &
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null' EXIT INT TERM HUP
 up=0

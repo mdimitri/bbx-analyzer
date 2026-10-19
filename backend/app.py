@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, Response
 from bbl import Log, list_logs
 
-ROOT = Path(__file__).parent
+ROOT = Path(__file__).resolve().parent.parent   # the project folder (backend/ sits one level down)
 LOGS = ROOT / "logs"
 LOGS.mkdir(exist_ok=True)
 class SafeJSON(Response):

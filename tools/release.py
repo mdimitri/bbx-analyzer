@@ -8,7 +8,7 @@
 Docs are part of the release: `check` fails when the code changed after the screenshots and sample report were made
 (docs/.docs-stamp holds a fingerprint of the code they were made from), when README / CHANGELOG / launchers disagree
 with version.py, or when a test fails. `docs` needs the dev requirements (playwright + its Chromium, see
-requirements-dev.txt); the PDF page previews also use `pdftoppm` (poppler) when it is installed.
+tests/requirements-dev.txt); the PDF page previews also use `pdftoppm` (poppler) when it is installed.
 """
 import asyncio
 import base64
@@ -25,7 +25,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "backend"))
 DOCS, IMG, DIST = ROOT / "docs", ROOT / "docs" / "img", ROOT / "dist"
 DEMO_LOG = "BTFL_FAWKES_20260927_192610.BBL"       # the one log shipped in logs/ and used for every screenshot
 DEMO_PROP = {"inch": 7, "blades": 2}
@@ -37,13 +37,13 @@ EXCLUDE_SUFFIX = (".npz", ".model.json", ".sim.json", ".pyc")
 
 
 def version():
-    return re.search(r'VERSION\s*=\s*"([^"]+)"', (ROOT / "version.py").read_text()).group(1)
+    return re.search(r'VERSION\s*=\s*"([^"]+)"', (ROOT / "backend" / "version.py").read_text()).group(1)
 
 
 def code_fingerprint():
     """Hash of everything the screenshots and the report depend on (app code, styles, glossary, the demo log)."""
     h = hashlib.sha1()
-    files = sorted(p for p in ROOT.glob("*.py")) + sorted((ROOT / "static").rglob("*.js")) + sorted((ROOT / "static").rglob("*.css")) \
+    files = sorted(p for p in (ROOT / "backend").glob("*.py")) + sorted((ROOT / "static").rglob("*.js")) + sorted((ROOT / "static").rglob("*.css")) \
         + [ROOT / "static" / "index.html", ROOT / "logs" / DEMO_LOG]
     for p in files:
         if p.exists() and "vendor" not in p.parts:
@@ -89,7 +89,7 @@ def _free_port():
 
 def _server():
     port = _free_port()
-    proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "app:app", "--port", str(port), "--log-level", "warning"], cwd=ROOT)
+    proc = subprocess.Popen([sys.executable, "-m", "uvicorn", "app:app", "--app-dir", "backend", "--port", str(port), "--log-level", "warning"], cwd=ROOT)
     for _ in range(120):
         try:
             urllib.request.urlopen(f"http://127.0.0.1:{port}/api/version", timeout=1); return proc, port

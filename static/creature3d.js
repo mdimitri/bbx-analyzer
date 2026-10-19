@@ -203,7 +203,7 @@ const CR3 = (() => {
     }
     // orbit and zoom
     canvas.addEventListener("pointerdown", e => { st.drag = { x: e.clientX, y: e.clientY, az: st.az, el: st.el }; st.idle = 0; canvas.setPointerCapture(e.pointerId); canvas.classList.add("grab"); });
-    canvas.addEventListener("pointermove", e => { if (!st.drag) return; st.az = st.drag.az - (e.clientX - st.drag.x) * 0.008; st.el = Math.max(-1.2, Math.min(1.45, st.drag.el + (e.clientY - st.drag.y) * 0.008)); st.idle = 0; });
+    canvas.addEventListener("pointermove", e => { if (!st.drag) return; st.az = st.drag.az + (e.clientX - st.drag.x) * 0.008; st.el = Math.max(-1.2, Math.min(1.45, st.drag.el + (e.clientY - st.drag.y) * 0.008)); st.idle = 0; });
     const up = () => { st.drag = null; canvas.classList.remove("grab"); }; canvas.addEventListener("pointerup", up); canvas.addEventListener("pointercancel", up);
     canvas.addEventListener("wheel", e => { e.preventDefault(); st.dist = Math.max(2.2, Math.min(22, st.dist * 1.1 ** Math.sign(e.deltaY))); st.idle = 0; }, { passive: false });
     canvas.addEventListener("dblclick", () => { st.az = 0.6; st.el = 0.22; if (st.c && st.rig) st.dist = 2.4 + 5 * Math.pow(st.rig.sc, 0.9); });
@@ -227,13 +227,13 @@ async function renderCreature() {
     <div class="crt-main">
       <div class="crt-stage" id="crStage"><canvas id="crCv"></canvas>
         <div class="crt-title"><div class="crt-k" id="crKind"></div><div class="crt-n" id="crName"></div></div>
-        <div class="crt-tools"><span class="seg" id="crMode"><button data-v="quad" class="on" title="Animate with the quad's own flight scores">Flies like ${esc(craft)}</button><button data-v="creature" title="Animate with the creature's own scores">Flies like itself</button></span>
+        <div class="crt-tools"><span class="seg" id="crMode"><button data-v="quad" class="on" title="The 3D creature moves with YOUR quad's flight scores: it flies the way your quad flew">Flies like ${esc(craft)}</button><button data-v="creature" title="The 3D creature moves with its own scores: it flies the way it would naturally">Flies like itself</button></span>
           <span class="chips" id="crFx">${chip("wind", "Wind", true)}${chip("trails", "Wing trails", true)}${chip("pip", "Quad copy", true)}${chip("auto", "Auto-rotate", true)}</span></div>
         <div class="crt-pip" id="crPip"><span>your quad · same flight</span></div><div class="crt-hud" id="crHud"></div><div class="crt-hint">drag = orbit · wheel = zoom · double-click = reset</div></div>
       <div class="crt-fall" id="crFall" hidden>3D needs WebGL, which this browser has turned off. The scores still work.</div>
-      <div class="fh" style="margin-top:10px">Closest matches</div><div class="crt-top" id="crTop"></div>
     </div>
     <aside class="crt-side">
+      <div class="fh">Closest matches</div><div class="crt-top" id="crTop"></div>
       <div class="crt-verdict" id="crVerdict"></div>
       <div class="crt-radar" id="crRadar"></div>
       <div class="hint">hover the chart for what each score means</div><div class="crt-tip" id="crTip" hidden></div>
@@ -247,32 +247,32 @@ async function renderCreature() {
     $("crKind").innerHTML = `<i style="background:${hex(c.kind)}"></i>${esc(c.kind)}`; $("crName").textContent = c.name;
     $("crVerdict").innerHTML = CRS.sel === best.c.id ? `<span class="hint">${esc(craft)} flies most like</span><div class="crt-big">${esc(c.name)}</div><span class="badge lv-good">${m.like}% alike</span>` : `<span class="hint">${esc(craft)} vs</span><div class="crt-big">${esc(c.name)}</div><span class="badge lv-info">${m.like}% alike</span> <button class="btn sm ghost" id="crBest">back to the best match (${esc(best.c.name)})</button>`;
     if ($("crBest")) $("crBest").onclick = () => select(best.c.id);
-    // radar chart: the quad (accent) over the creature (its kind's colour)
+    // radar chart: the quad (accent, solid) over the creature (its kind's colour, dashed)
     const R0 = 74, cx = 110, cy = 100, pt = (i, v) => { const a = -Math.PI / 2 + i / 8 * 2 * Math.PI, r = R0 * v / 99; return [cx + Math.cos(a) * r, cy + Math.sin(a) * r]; }, poly = vs => vs.map((v, i) => pt(i, v).join(",")).join(" ");
     $("crRadar").innerHTML = `<svg viewBox="0 0 220 200" role="img" aria-label="Radar chart of the quad against the creature">${[25, 50, 75, 99].map(r => `<polygon points="${poly(Array(8).fill(r))}" fill="none" stroke="var(--grid)" stroke-width="1"/>`).join("")}
       ${CR_AXES.map(([k, n], i) => { const [x, y] = pt(i, 99), [lx, ly] = pt(i, 117); return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--grid)"/><text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" font-size="8.5" fill="var(--ink2)">${n}</text>`; }).join("")}
-      <polygon points="${poly(c.v)}" fill="${hex(c.kind)}" fill-opacity="0.3" stroke="${hex(c.kind)}" stroke-width="2"/><polygon points="${poly(q)}" fill="var(--accent)" fill-opacity="0.18" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4 3"/></svg>
-      <div class="crt-leg"><span><i style="border-top:2px dashed var(--accent)"></i>${esc(craft)}</span><span><i style="background:${hex(c.kind)}"></i>${esc(c.name)}</span></div>`;
+      <polygon points="${poly(c.v)}" fill="${hex(c.kind)}" fill-opacity="0.22" stroke="${hex(c.kind)}" stroke-width="2" stroke-dasharray="5 3"/><polygon points="${poly(q)}" fill="var(--accent)" fill-opacity="0.18" stroke="var(--accent)" stroke-width="2.4"/></svg>
+      <div class="crt-leg"><span><i style="border-top:2px solid var(--accent)"></i>${esc(craft)}</span><span><i style="border-top:2px dashed ${hex(c.kind)}"></i>${esc(c.name)}</span></div>`;
     // hovering a wedge of the radar explains that axis: a one-liner for each of the two, then the numbers and what the score is made of
     const tip = $("crTip"), wedge = (i, a0, a1) => { const p = k => [cx + Math.cos(k) * 100, cy + Math.sin(k) * 100]; return `<polygon class="crt-wedge" data-i="${i}" points="${cx},${cy} ${p(a0)} ${p(a1)}" fill="transparent"/>`; };
     $("crRadar").querySelector("svg").insertAdjacentHTML("beforeend", CR_AXES.map((_, i) => { const a = -Math.PI / 2 + i / 8 * 2 * Math.PI; return wedge(i, a - Math.PI / 8, a + Math.PI / 8); }).join(""));
     const show = (e, i) => { const [k, n] = CR_AXES[i], why = CRS.q.why[k], miss = CRS.q.miss.includes(k), d = c.v[i] - q[i];
-      tip.innerHTML = `<b>${n}</b><div class="crt-q"><span style="color:var(--accent)">${esc(craft)}</span> ${esc(crQuip(k, q[i]))}</div><div class="crt-q"><span style="color:${hex(c.kind)}">${esc(c.name)}</span> ${esc(crQuip(k, c.v[i]))}</div>
+      tip.innerHTML = `<b>${n}</b><div class="crt-q"><span style="color:var(--accent)">${esc(craft)}</span> ${esc(crQuip(k, q[i]))}</div><div class="crt-q"><span style="color:${hex(c.kind)}">${esc(c.name)}</span> ${esc(crCreatureQuip(c, k, c.v[i]))}</div>
         <div class="crt-num">${q[i]} → ${c.v[i]} <small>(${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d)})</small></div>${why ? `<div class="crt-why2">${esc(miss ? "no data for this, scored as average" : why)}</div>` : ""}`;
       tip.hidden = false; const r = $("crRadar").getBoundingClientRect(), x = Math.min(e.clientX + 14, innerWidth - 330), y = Math.min(e.clientY + 14, innerHeight - tip.offsetHeight - 10); tip.style.left = x + "px"; tip.style.top = y + "px"; };
     $("crRadar").querySelectorAll(".crt-wedge").forEach(w => { w.onmousemove = e => show(e, +w.dataset.i); w.onmouseleave = () => { tip.hidden = true; }; });
     $("crLore").textContent = crLore(c);
     if (CRS.g) { CRS.g.setCreature(c, Object.fromEntries(CR_AXES.map(([k], i) => [k, c.v[i] / 99])), false); }
   };
-  const select = id => { CRS.sel = id; showSel(); drawGrid(); };
+  const drawTop = () => { $("crTop").innerHTML = CRS.ranked.slice(0, 5).map((m, i) => `<button class="crt-card ${m.c.id === CRS.sel ? "on" : ""}" data-id="${m.c.id}" style="--h:${CR_KINDS[m.c.kind].hue}"><i></i><span>${i + 1}. ${esc(m.c.name)}</span><b>${m.like}%</b></button>`).join("");
+    $("crTop").querySelectorAll("[data-id]").forEach(b => b.onclick = () => select(+b.dataset.id)); };
+  const select = id => { CRS.sel = id; showSel(); drawGrid(); drawTop(); };
   const drawGrid = () => { const qy = CRS.q_.trim().toLowerCase(); $("crGrid").innerHTML = CRS.ranked.filter(m => (CRS.kind === "all" || m.c.kind === CRS.kind) && (!qy || m.c.name.toLowerCase().includes(qy) || m.c.kind.toLowerCase().includes(qy)))
     .map(m => `<button class="crt-card ${m.c.id === CRS.sel ? "on" : ""}" data-id="${m.c.id}" style="--h:${CR_KINDS[m.c.kind].hue}"><i></i><span>${esc(m.c.name)}</span><b>${m.like}%</b></button>`).join("") || `<div class="hint">No creature matches that.</div>`;
     $("crGrid").querySelectorAll("[data-id]").forEach(b => b.onclick = () => { select(+b.dataset.id); $("crStage").scrollIntoView({ behavior: "smooth", block: "nearest" }); }); };
-  $("crTop").innerHTML = CRS.ranked.slice(0, 5).map((m, i) => `<button class="crt-card ${i ? "" : "best"}" data-id="${m.c.id}" style="--h:${CR_KINDS[m.c.kind].hue}"><i></i><span>${i + 1}. ${esc(m.c.name)}</span><b>${m.like}%</b></button>`).join("");
-  $("crTop").querySelectorAll("[data-id]").forEach(b => b.onclick = () => select(+b.dataset.id));
   $("crSearch").oninput = e => { CRS.q_ = e.target.value; drawGrid(); };
   $("crKinds").onclick = e => { const b = e.target.closest("[data-k]"); if (!b) return; CRS.kind = b.dataset.k; [...$("crKinds").children].forEach(x => x.classList.toggle("on", x.dataset.k === CRS.kind)); drawGrid(); };
-  showSel(); drawGrid();
+  showSel(); drawGrid(); drawTop();
   // the 3D view
   if (CRS.raf) cancelAnimationFrame(CRS.raf); if (CRS.g) { CRS.g.dispose(); CRS.g = null; }
   if (!CR3.supported()) { $("crCv").hidden = true; $("crFall").hidden = false; return; }
