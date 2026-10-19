@@ -64,12 +64,11 @@ const CR3 = (() => {
           const lx = Math.sin(t * 0.9 + seed * 9) * 0.5, ly = Math.sin(t * 1.3 + seed * 5) * 0.4; iris.position.set(r * 0.85, ly * r * 0.28, lx * r * 0.45); pupil.position.set(r * 1.38, ly * r * 0.36, lx * r * 0.55);
           brow.rotation.x = z * (mood * 1.1 + 0.18 * Math.sin(t * 1.7 + seed * 11)); brow.position.y = r * (2.0 + 0.25 * Math.sin(t * 0.8 + seed * 3)); });
         return eg; } const g = new T.Group(), op = o.op != null ? o.op : translucent ? 0.62 : null, mt = new T.MeshStandardMaterial({ color: col, flatShading: true, roughness: L.metal ? 0.38 : 0.72, metalness: L.metal ? 0.7 : 0.05, side: o.double ? T.DoubleSide : T.FrontSide, transparent: op != null, opacity: op ?? 1, emissive: o.glow ? col : 0x000000, emissiveIntensity: o.glow ? 0.9 : 0 });
-      if (o.wire !== false && !o.plain && !o.glow) { mt.polygonOffset = true; mt.polygonOffsetFactor = 1; mt.polygonOffsetUnits = 1; }
-      g.add(new T.Mesh(geo, mt)); if (o.wire !== false && !o.plain && !o.glow) g.add(new T.Mesh(geo, new T.MeshBasicMaterial({ color: C.edge, wireframe: true, transparent: true, opacity: o.wo ?? 0.11, depthWrite: false }))); if (!o.noEdge) g.add(new T.LineSegments(new T.EdgesGeometry(geo, o.ang ?? 22), new T.LineBasicMaterial({ color: C.edge, transparent: true, opacity: o.eo ?? 0.85 }))); return g; };
+      g.add(new T.Mesh(geo, mt)); if (!o.noEdge) g.add(new T.LineSegments(new T.EdgesGeometry(geo, o.ang ?? 22), new T.LineBasicMaterial({ color: C.edge, transparent: true, opacity: o.eo ?? 0.85 }))); return g; };
     const place = (g, x, y, z, sx, sy, sz) => { g.position.set(x, y, z); if (sx !== undefined) g.scale.set(sx, sy ?? sx, sz ?? sx); return g; };
     // one mesh density everywhere: every part is subdivided to the same target edge length E (in model units), so a neck, a wing and a head carry the same number of polygons per unit of surface
     const E = 0.09, nA = (m, k = 1) => Math.max(1, Math.ceil(m * k / E)), ells = [];
-    const ell = (sx, sy, sz, col, o = {}) => { const m = Math.max(sx, sy, sz), g = place(mesh(new T.IcosahedronGeometry(1, o.d < 0 ? 0 : Math.min(10, nA(m, 1.05) - 1)), col, { ang: 1, wire: false, ...o }), 0, 0, 0, sx, sy, sz); ells.push({ g, sx, sy, sz }); return g; };
+    const ell = (sx, sy, sz, col, o = {}) => { const m = Math.max(sx, sy, sz), g = place(mesh(new T.IcosahedronGeometry(1, o.d < 0 ? 0 : Math.min(10, nA(m, 1.05) - 1)), col, { noEdge: true, ...o }), 0, 0, 0, sx, sy, sz); ells.push({ g, sx, sy, sz, geo: g.children[0].geometry }); return g; };
     const fine = n => n <= 3 ? 6 : Math.min(14, n * 2), rad = r => Math.max(6, Math.min(20, Math.round(2 * Math.PI * r / E))), cone = (r, h, seg = 5, col = C.body, o = {}) => mesh(new T.ConeGeometry(r, h, rad(r), Math.min(14, nA(h))), col, { ang: 30, ...o }), cyl = (r1, r2, h, seg = 6, col = C.body, o = {}) => mesh(new T.CylinderGeometry(r1, r2, h, rad(Math.max(r1, r2)), Math.min(14, nA(h))), col, { ang: 30, ...o }), box = (sx, sy, sz, col = C.body, o = {}) => mesh(new T.BoxGeometry(sx, sy, sz, Math.min(8, nA(sx)), Math.min(8, nA(sy)), Math.min(8, nA(sz))), col, o);
     const UPV = new T.Vector3(0, 1, 0);
     // a limb is a pivot at its start joint holding the cylinder out to its end; build() later links end-to-start limbs into chains and gives legs a gait and tails a wag
@@ -116,12 +115,13 @@ const CR3 = (() => {
       ticks.push(t => segs.forEach((s, i) => { s.rotation.y = Math.sin(t * 2.2 - i * 0.55) * wag * 0.35; s.rotation.z = Math.sin(t * 1.7 - i * 0.5) * 0.12; })); return segs; };
     const K = { ells, T, C, root, owned, ticks, wings, tips, heads, mesh, place, ell, cone, cyl, box, limb, wingPair, addWing, tailChain, hsl };
     const arch = CR_ARCH[L.a] || CR_ARCH.spirit; arch(K, L.a in CR_ARCH ? L : { ...L, kind: "wisp" }, c);
-    if (typeof CR_DETAIL === "function") CR_DETAIL(K, L, c, window.CR_DETAIL_LEVEL ?? 3);
+    if (typeof CR_DETAIL === "function") CR_DETAIL(K, L, c, window.CR_DETAIL_LEVEL ?? 4);
     root.userData.owned = owned;
     const gait = { w: 6, amp: 0.45, gal: 0 };
     animateLimbs(K, joints, gait);
     // heads look around and nod a little, out of step with the wing beat; every eye has already got its own blink and wandering pupil
     K.heads.forEach((h, i) => { let b = null; ticks.push(t => { if (!b) b = [h.rotation.y, h.rotation.z]; h.rotation.y = b[0] + Math.sin(t * 0.7 + seed * 6 + i) * 0.2; h.rotation.z = b[1] + Math.sin(t * 1.1 + seed * 4 + i) * 0.06; }); });
+    if (K.flex) ticks.push(K.flex);   // last, so the whole-body bend sits on top of every other motion
     return { root, wings, tips, ticks, size: Math.sqrt(L.size || 1), look: L, vertical: false, gait };
   }
 

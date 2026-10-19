@@ -3,6 +3,15 @@
 Every release lists what changed for pilots first, then fixes. Screenshots, the banner and `docs/sample-report.pdf` are
 regenerated from the app for every release (`python tools/release.py all`).
 
+## 2.9.0 · 2026-10-19
+
+**Changed**
+- **Avatar detail level 4 (now the default):** the whole body flexes. A wave runs from the shoulders to the tail, lagging the wing beat (the body rises on each downstroke), with a sideways sway that grows towards the tail. Body ellipsoids deform vertex by vertex; limbs, heads, wings, tail roots and the plumage or scale tiles ride the same curve, and the head nods against the beat.
+- **No more wireframe:** the mesh overlay and the edge lines on body ellipsoids are gone; the dense flat-shaded surfaces carry the shape on their own.
+
+**Notes**
+- `window.CR_DETAIL_LEVEL` now goes 0-4 (4 = flexing body, default). Rigid parts follow the body curve by position only (they do not rotate with it), and creatures without a main body ellipsoid bend less.
+
 ## 2.8.0 · 2026-10-19
 
 **Changed**

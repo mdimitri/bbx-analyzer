@@ -1,8 +1,8 @@
 // Level-3 detail layer: extra body parts, skin and plumage, and the motion that goes with them, added on top of every body plan (called from build() in creature3d.js).
-//   window.CR_DETAIL_LEVEL: 0 = off, 1 = face and limbs, 2 = + skin and plumage, 3 = + life (default)
+//   window.CR_DETAIL_LEVEL: 0 = off, 1 = face and limbs, 2 = + skin and plumage, 3 = + life, 4 = + a flexing body (default)
 const CR_DETAIL = (K, L, c, level) => {
   if (!level) return;
-  const { T, C, root } = K, both = f => [-1, 1].forEach(f), Z = new T.Vector3(0, 0, 1), L3 = level >= 3, a = L.a;
+  const { T, C, root } = K, both = f => [-1, 1].forEach(f), Z = new T.Vector3(0, 0, 1), L3 = level >= 3, L4 = level >= 4, a = L.a;
   const hasEagle = L.head === "eagle" || a === "bird";
   const noseHole = (parent, x, y, z, r = 0.012) => { const g = K.mesh(new T.IcosahedronGeometry(r, 0), C.edge, { noEdge: true, plain: true, op: 1 }); g.position.set(x, y, z); parent.add(g); return g; };
   // tiles laid over an ellipsoid like feathers, fur or scales: each lies flat on the surface with its long axis running rearwards, rows offset against each other
@@ -18,7 +18,7 @@ const CR_DETAIL = (K, L, c, level) => {
   const big = K.ells.filter(e => e.g.parent === root).sort((p, q) => q.sx * q.sy * q.sz - p.sx * p.sy * p.sz)[0];
   const skin = (colors, o = {}) => { if (level < 2 || !big) return;
     const g = new T.Group(); g.position.set(big.g.position.x, big.g.position.y, big.g.position.z); root.add(g);
-    const pcs = shell(g, [0, 0, 0], big.sx, big.sy, big.sz, { colors, ...o });
+    const pcs = shell(g, [0, 0, 0], big.sx, big.sy, big.sz, { colors, ...o }); g.userData.shellTiles = pcs;
     if (L3) { const y0 = g.position.y; K.ticks.push(t => { const br = 1 + 0.02 * Math.sin(t * 2.3); g.scale.set(1, br, br); pcs.forEach(p => { p.g.rotation.x = Math.sin(t * 2.6 + p.ix * 0.6 + p.ir * 0.4) * 0.07; }); }); } return g; };
   // arm and finger bones along a wing with knuckles and a claw, fanned out like the real thing
   const bones = (w, thick, fingers) => { const { pivot, side, s, ch } = w, mk = (p, q, r0, r1) => { const g = K.limb(p, q, r0, r1, C.edge); root.remove(g); pivot.add(g); return g; };
@@ -61,5 +61,25 @@ const CR_DETAIL = (K, L, c, level) => {
   else if (a === "quad4") { skin([C.body, C.alt, C.body], { size: 0.12, len: 1.4, flat: 0.35 });
     if (level >= 1) both(sd => { [0.5, -0.55].forEach(x => { const m = K.ell(0.2, 0.2, 0.12, C.body, { d: 1 }); m.position.set(x, -0.1, sd * 0.27); root.add(m); }); }); }
   // chest rises and falls on every body plan that has a main body
-  if (L3 && big && level < 2) K.ticks.push(t => { const br = 1 + 0.02 * Math.sin(t * 2.3); big.g.scale.set(big.sx, big.sy * br, big.sz * br); });
+  if (L3 && big) K.ticks.push(t => { const br = 1 + 0.02 * Math.sin(t * 2.3); big.g.scale.set(big.sx, big.sy * br, big.sz * br); });
+
+  // ---- level 4: the whole body bends. A wave runs from the shoulders to the tail, lagging the wing beat (the body rises on the downstroke), with a sideways sway that grows towards the tail. Body ellipsoids deform vertex by vertex, rigid parts (limbs, heads, wings, tail roots, plumage tiles) ride the same curve.
+  if (L4) { let parts = null, tbl = null; const hist = [], NB = 40, ox = new Float32Array(NB + 1), oy = new Float32Array(NB + 1), oz = new Float32Array(NB + 1);
+    const lag = tt => { for (let i = hist.length - 1; i >= 0; i--) if (hist[i][0] <= tt) return hist[i][1]; return hist.length ? hist[0][1] : 0; };
+    K.flex = t => {
+      if (!parts) { const els = K.ells.filter(e => e.g.parent === root), set = new Set(els.map(e => e.g)); let x0 = 9, x1 = -9; els.forEach(e => { x0 = Math.min(x0, e.g.position.x - e.sx); x1 = Math.max(x1, e.g.position.x + e.sx); }); if (x0 > x1) { x0 = -1; x1 = 1; }
+        parts = { els: els.map(e => { e.base = e.geo.attributes.position.array.slice(); e.geo.attributes.position.usage = T.DynamicDrawUsage; e.g.children[0].frustumCulled = false; return e; }), x0: x0 - 1.2, x1: x1 + 1.2, front: x1, len: Math.max(1.2, x1 - x0), moved: [], tiles: [] };
+        root.children.forEach(o => { if (set.has(o)) return; if (o.userData.shellTiles) parts.tiles.push(o); else parts.moved.push({ o, b: o.position.clone(), last: new T.Vector3() }); });
+        parts.tiles.forEach(g => { g.userData.shellTiles.forEach(tl => { tl.b = tl.g.position.clone(); }); }); }
+      const w0 = K.wings[0], sig = w0 ? w0.pivot.rotation.x * w0.side : Math.sin(t * 4) * 0.5; hist.push([t, sig]); while (hist.length > 90 || (hist.length > 2 && t - hist[0][0] > 1.2)) hist.shift();
+      const { x0, x1, front, len } = parts;
+      for (let i = 0; i <= NB; i++) { const x = x0 + (x1 - x0) * i / NB, d = Math.max(0, front - x) / len;   // 0 at the shoulders, 1 at the tail
+        ox[i] = x; oy[i] = -0.16 * lag(t - 0.09 * d * len) * (0.35 + 0.65 * d) + 0.025 * Math.sin(t * 2.3 - 3 * x); oz[i] = 0.11 * d * d * Math.sin(t * 3.1 - 2.4 * x) + 0.018 * Math.sin(t * 1.7 - 2 * x); }
+      const at = (x, arr) => { const u = Math.min(NB, Math.max(0, (x - x0) / (x1 - x0) * NB)), i = Math.min(NB - 1, Math.floor(u)), f = u - i; return arr[i] * (1 - f) + arr[i + 1] * f; };
+      parts.els.forEach(e => { const P = e.geo.attributes.position, a = P.array, b = e.base, gx = e.g.position.x, sy = e.g.scale.y || 1, sz = e.g.scale.z || 1, sx = e.g.scale.x || 1;
+        for (let i = 0; i < a.length; i += 3) { const x = gx + b[i] * sx; a[i + 1] = b[i + 1] + at(x, oy) / sy; a[i + 2] = b[i + 2] + at(x, oz) / sz; } P.needsUpdate = true; });
+      parts.moved.forEach(m => { const o = m.o, cur = o.position; if (cur.distanceToSquared(m.b.clone().add(m.last)) > 1e-10) m.b.copy(cur);   // somebody else moved it: take that as the new rest position
+        m.last.set(0, at(m.b.x, oy), at(m.b.x, oz)); o.position.copy(m.b).add(m.last); });
+      parts.tiles.forEach(g => g.userData.shellTiles.forEach(tl => { const x = g.position.x + tl.b.x; tl.g.position.set(tl.b.x, tl.b.y + at(x, oy) / (g.scale.y || 1), tl.b.z + at(x, oz) / (g.scale.z || 1)); }));
+      K.heads.forEach((h, i) => { h.rotation.z += 0.35 * (sig - lag(t - 0.12)) + 0.04 * Math.sin(t * 2.3 + i); }); }; }
 };
