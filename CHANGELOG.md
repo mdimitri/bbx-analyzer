@@ -3,6 +3,15 @@
 Every release lists what changed for pilots first, then fixes. Screenshots, the banner and `docs/sample-report.pdf` are
 regenerated from the app for every release (`python tools/release.py all`).
 
+## 2.6.1 · 2026-10-19
+
+**Changed**
+- **Tabs back where you expect them.** Only Tracking has sub-views now (Sticks vs gyro · PIDs vs gyro · Motors vs RPM). Noise, Spectrogram, Filter delay, Step response, PID simulator and Motor health are top-level tabs again, grouped by dividers.
+- **Tune plan is suggestions only:** a settings table, then the steps. Warnings, the CLI block and the next-flight checklist sit in a collapsed Details section.
+- **Splash exhaust:** streaks start at most half a prop long, shrink as they spread, and slow down and scatter like real air.
+- **Layout polish:** the findings badge and Tips moved to the header, one-line tab bar, larger type and a clearer reading order.
+- **README rewritten** around what each tab offers.
+
 ## 2.6 · 2026-10-19
 
 **New**

@@ -175,4 +175,4 @@ stability, motors & power, the learned dynamics, the tune plan with its CLI, bef
 - **Avatar tab:** `quadScores(R, stats)` maps log metrics to 8 axes (0-99); `crMatch` ranks creatures by RMS gap, similarity `100*exp(-d/28)`.
 - **Summary:** collapsible cards (state kept in `sumOpen`), filter-latency card. **Tracking:** `timesync.js` drag-scroll over the whole plot area. **Arrows:** ▲/▼ helpers `DIR` (UI) and `UP`/`DN` (PDF).
 
-- **Tab groups:** `TGROUPS` in `app.js` maps the top-bar groups to the legacy tab ids (kept as hidden buttons); `#subtabs` shows the group's views. `suggestTune()` in `pidsim.js` always searches around the logged gains with hard constraints, so repeated use is idempotent.
+- **Tab groups:** `TGROUPS` in `app.js` currently holds one group, Tracking (tracking/pid/motors as hidden legacy buttons, `#subtabs` pill bar). `suggestTune()` in `pidsim.js` always searches around the logged gains with hard constraints, so repeated use is idempotent.

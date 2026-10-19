@@ -305,7 +305,7 @@ const W3 = (() => {
       const zb = qrotV(q, [0, 0, 1]), LIFE = 0.9;
       const step = (pt, h, TT) => { const [x, y, z] = pt.p, A = 0.9 * Math.min(1, pt.age * 2.5) * (0.3 + pt.th);
         const ed = [Math.sin(1.7 * y + TT * 1.3 + pt.ph) - Math.sin(1.3 * z + TT * 0.9), Math.sin(1.5 * z + TT * 1.1 + pt.ph) - Math.sin(1.9 * x + TT * 1.5), Math.sin(1.6 * x + TT * 0.7) - Math.sin(1.4 * y + TT * 1.2 + pt.ph)];
-        const sp = Math.hypot(...pt.v), dr = Math.exp(-h * (1.4 + 0.12 * sp)), sig = (0.3 + 2.0 * pt.age) * Math.sqrt(h);
+        const sp = Math.hypot(...pt.v), dr = Math.exp(-h * (2.6 + 0.18 * sp + 3 * pt.age)), sig = (0.4 + 7.0 * pt.age * pt.age + 3.0 * pt.age) * Math.sqrt(h) * (1 + 0.35 * QS);
         for (let a = 0; a < 3; a++) { pt.v[a] = pt.v[a] * dr + A * ed[a] * h * 5 + gauss() * sig; pt.p[a] += pt.v[a] * h; } };
       if (o.particles && dtLog > 0) {
         st.ptime += dtLog;
@@ -318,7 +318,7 @@ const W3 = (() => {
       } else if (!o.particles) PS.length = 0;
       const dark = curTheme === "dark";
       { const bg = dark ? 0 : 1, cl = dark ? 0.92 : 0.12, vis = o.cam === "flight" ? 0.35 : 1;
-        for (let k = 0; k < PS.length; k++) { const pt = PS[k], life = 1 - pt.age / LIFE, b = k * 6, sp = Math.hypot(pt.v[0] - vq[0], pt.v[1] - vq[1], pt.v[2] - vq[2]) || 1, L = Math.min(0.5 * QS, 0.012 * sp * QS + 0.03), f = Math.max(0, life) * (0.35 + 0.65 * pt.th) * vis;
+        for (let k = 0; k < PS.length; k++) { const pt = PS[k], life = 1 - pt.age / LIFE, b = k * 6, sp = Math.hypot(pt.v[0] - vq[0], pt.v[1] - vq[1], pt.v[2] - vq[2]) || 1, L = 0.09 * QS * Math.min(1, 0.25 + 0.02 * sp / QS) * Math.max(0.15, 1 - 0.8 * pt.age / LIFE), f = Math.max(0, life) * (0.35 + 0.65 * pt.th) * vis;
           wash.P[b] = pt.p[0]; wash.P[b + 1] = pt.p[2]; wash.P[b + 2] = -pt.p[1];
           wash.P[b + 3] = pt.p[0] - (pt.v[0] - vq[0]) / sp * L; wash.P[b + 4] = pt.p[2] - (pt.v[2] - vq[2]) / sp * L; wash.P[b + 5] = -(pt.p[1] - (pt.v[1] - vq[1]) / sp * L);
           const hc = bg + (cl - bg) * f * 0.75, tc = bg + (cl - bg) * f * 0.1; wash.C[b] = wash.C[b + 1] = wash.C[b + 2] = hc; wash.C[b + 3] = wash.C[b + 4] = wash.C[b + 5] = tc; }

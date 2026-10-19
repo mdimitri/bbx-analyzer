@@ -1298,12 +1298,11 @@ function setTabLevel(tab, lvl) {
   btn.dataset.lvl = lvl; syncTabGroups();
 }
 // ---------- tab groups: seven top-level tabs, the related views live under them as sub-tabs (the old tab buttons stay in the DOM, hidden, so every "go to tab" link still works) ----------
-const TGROUPS = [{ id: "tune", label: "Tune", subs: ["plan", "pidsim", "step"] }, { id: "tracking", label: "Tracking", subs: ["tracking", "pid"] },
-  { id: "noisef", label: "Noise & filters", subs: ["noise", "spectro", "delay"] }, { id: "motorsg", label: "Motors", subs: ["motors", "health"] }];
-const SUBLABEL = { plan: "Tune plan", pidsim: "PID simulator", step: "Step response", tracking: "Sticks vs gyro", pid: "PID terms", noise: "Noise spectrum", spectro: "Spectrogram", delay: "Filter delay", motors: "Motor traces", health: "Motor health" };
+const TGROUPS = [{ id: "tracking", label: "Tracking", subs: ["tracking", "pid", "motors"] }];
+const SUBLABEL = { tracking: "Sticks vs gyro", pid: "PIDs vs gyro", motors: "Motors vs RPM" };
 function setupTabGroups() {
-  const nav = $("tabs"), anchor = nav.querySelector('[data-tab="compare"]');
-  for (const g of TGROUPS) { const b = document.createElement("button"); b.dataset.group = g.id; b.textContent = g.label; b.dataset.tip = nav.querySelector(`[data-tab="${g.subs[0]}"]`).dataset.tip; nav.insertBefore(b, anchor); g.btn = b; g.subs.forEach(t => { nav.querySelector(`[data-tab="${t}"]`).hidden = true; }); }
+  const nav = $("tabs");
+  for (const g of TGROUPS) { const b = document.createElement("button"); b.dataset.group = g.id; b.textContent = g.label; b.dataset.tip = nav.querySelector(`[data-tab="${g.subs[0]}"]`).dataset.tip; nav.insertBefore(b, nav.querySelector(`[data-tab="${g.subs[0]}"]`)); g.btn = b; g.subs.forEach(t => { nav.querySelector(`[data-tab="${t}"]`).hidden = true; }); }
 }
 function syncTabGroups() {
   for (const g of TGROUPS) { if (!g.btn) continue; g.btn.classList.toggle("gon", g.subs.includes(S.tab));

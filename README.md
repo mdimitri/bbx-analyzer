@@ -2,7 +2,7 @@
 
 **BBX Analyzer** reads your Betaflight blackbox logs and tells you, in plain words, what is going on with your quad and what to try next. It covers noise and filters, frame resonances, the tune, propwash, and motor and prop health. Every finding comes from your own log, and each fix comes with the CLI lines.
 
-It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 2.6** ([what's new](CHANGELOG.md)).
+It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 2.6.1** ([what's new](CHANGELOG.md)).
 
 ---
 
@@ -26,52 +26,62 @@ After the first start you also get a **BBX Analyzer** shortcut with its icon: on
 
 ---
 
-## What it finds that the classic tools don't
+## What it does
 
-If you know Blackbox Explorer or PIDtoolbox, you already have traces, spectra, spectrograms and step responses. BBX has those too, and adds the parts that answer *"so what do I change?"*:
+Open a log and BBX answers three questions: **what is wrong, why, and what do I change.** Every answer comes from your own flight, is written in plain language, and ends with the CLI lines to paste.
 
-- 🛸 **Something to look at while you wait.** With no log open, a quad flies freestyle lines and tricks, in wind, around a black-and-white shaded wireframe toy town (street grid with lane markings, ring road, parks, forest, textured houses and towers) at true scale, with cars driving the roads and people walking and cycling. Trick names, sticks and live plots on top.
+![Summary: top priorities first, every analysis on one page](docs/img/summary.png)
 
-![The splash screen: the quad in its toy world](docs/img/splash.png)
-
-- 🐉 **The Avatar tab.** A fun one: BBX scores how your quad flew on eight axes (speed, power, agility, nimbleness, endurance, climb, steadiness, smoothness), matches it to the most alike of 150 mythical, wild and absurd creatures (a flying pig for a poor tune, naturally), each with its own 3D model, and a copy of your quad flying the same flight in the corner and shows that creature in 3D, rotatable, flying with your quad's characteristics through wind particles, with radar and stats beside it.
-- 📂 **Collapsible summary cards.** Each card opens with its visual and main findings; expand it for the rest. A filter-latency card sits with them.
-- ↕️ **Better/worse arrows.** Every metric, in the app and the PDF, carries ▲ or ▼ to show which direction is better.
-- 🗺️ **One tune plan.** Every suggestion from every analysis, in the order to apply it (logging → mechanical → filters → PIDs → feedforward), with conflicts resolved and one CLI block to paste. Tick what you want; choices from the filter planner or the PID simulator can replace the automatic proposal.
-- ⏱️ **Filter delay, explained.** Every filter's delay at the loop's crossover frequency as stacked bars, next to Betaflight's firmware defaults (checked against the Betaflight source) or those defaults scaled for your prop size. Hover a filter for its settings next to the reference's, why it delays that much, and the exact phase margin after each possible change, with the CLI lines. Also: phase margin with and without filters, how far P and D could go, and what lighter or heavier filtering would cost in motor noise.
-- 🎯 **Is it on the edge?** BBX checks whether an axis wobbles on its own while the sticks are centred, and whether that wobble sits where the loop model says the margin runs out. When both agree, the axis needs less P/D or lighter filtering.
-- 🧠 **A PID simulator learned from your own flight.** BBX fits your quad's real dynamics from the log: control authority and damping, with the motor lag anchored to its eRPM measurement. It then runs Betaflight's PID loop and your actual filters against them. Change P, I, D, D max or FF and you see the step response, how it handles a sudden kick, and stability margins. You can also replay your real stick inputs through the new tune.
-- 🌊 **Propwash, chop by chop.** Every throttle chop is found and scored only while the sticks are still, then rated from *excellent* to *terrible*. Hover a chop and a 3D quad replays it, wobble included.
-- 🔊 **Frame resonances and a filter planner.** BBX finds frame resonances that stay at one frequency while the motor noise moves with RPM. It tells you whether your filters actually remove them and proposes notches with ready-to-paste CLI. It also predicts what a change does to noise and delay before you fly it.
-- ⚙️ **Motor & prop health per motor.** It tracks each motor's own rotation, so it can say *"M3 vibrates 1.9× more than the others once per turn: unbalanced prop or bent shaft"*. It also covers load balance (which side is heavy), speed for the same command, and desyncs (measured against the speed the command should give, so a big prop spinning down after a chop isn't mistaken for one).
-- 🔋 **Where your battery goes.** It estimates how much power is lost to motors twitching, buzzing on noise and uneven load. Each effect is shown on your own motor traces. No current sensor needed.
-- ⇄ **Before → after.** Open two flights and BBX lists what you changed in the settings, what got better or worse in the flight, and what to try next based on what moved together.
-- 📄 **PDF report.** One click, made in your browser: profile, key numbers, priorities and the flight at a glance, then a section per area (stick response & PID, noise & filters with filter delay, propwash & stability, motors & power, the learned dynamics), the tune plan with its CLI, before → after and all findings. See the [sample report](docs/sample-report.pdf).
-- 🐞 **Debug modes understood.** With `debug_mode` FFT_FREQ, DYN_LPF or RPM_FILTER the logged notch and motor frequencies are drawn on the spectrogram, so you see whether the dynamic notches really follow the noise. Other modes (D_MAX, FEEDFORWARD, RC_SMOOTHING, TPA, …) show as labelled traces.
-- 📋 **Plain-language findings.** Each one has a *Try:* and a *Cost:*, with the CLI lines to paste. Prop size, blade count and the all-up weight are estimated from the log (and you can set them), so the advice fits a 2.5″ whoop and a 10″ long-range rig alike.
-- 🎬 **3D replay and synced video.** Play the flight on an animated quad, or load your DVR clip and watch it behind the charts.
-
----
-
-## A look inside
+### Start with the Summary and the Tune plan
 
 | | |
 |---|---|
-| ![Summary: top priorities and every analysis on one page](docs/img/summary.png) | ![Tune plan with one CLI block](docs/img/plan.png) |
-| **Summary**: top priorities first, every analysis on one page | **Tune plan**: every suggestion in order, one CLI block |
-| ![Filter delay with the hover card on a filter](docs/img/delay.png) | ![Spectrogram with frame resonances marked in red](docs/img/spectrogram.jpg) |
-| **Filter delay**: each filter vs Betaflight defaults, why, and what a change does | **Spectrogram**: frame resonances marked, motor harmonics overlaid |
-| ![Propwash chop replay on a 3D quad](docs/img/propwash.png) | ![PID simulator](docs/img/pidsim.png) |
-| **Propwash**: hover a chop to replay it, with its rating and stats | **PID simulator**: your quad's dynamics, your filters, new PIDs |
-| ![Motor health cards](docs/img/health.png) | ![Battery waste with motor traces](docs/img/battery.png) |
-| **Motor health**: one card per motor, where it sits on the frame | **Battery**: the real motor trace vs the battery-optimal line |
-| ![Noise and filters](docs/img/noise.png) | ![Tracking with the 3D viewer](docs/img/tracking.png) |
-| **Noise & filters**: raw vs filtered, filter shapes, the planner | **Tracking**: sticks vs gyro with the 3D quad |
-| ![Avatar tab](docs/img/avatar.png) | |
-| **Avatar**: your quad's nearest creature, next to your quad | |
+| **Summary** | Top priorities first, then one card per analysis with its chart and main findings. Every number shows ▲ or ▼ for which direction is better. |
+| **Tune plan** | Every suggestion from every analysis, in the order to apply it: logging, mechanical, filters, PIDs, feedforward. Opens with a table *Setting · Now · Suggested · Why*. Untick what you disagree with; the CLI block, warnings and a next-flight checklist are one click away. |
+| **PDF report** | One click, made in your browser: priorities, key numbers, a section per area, the plan and its CLI. See the [sample report](docs/sample-report.pdf). |
 
-![The first pages of the PDF report](docs/img/report.png)
-**PDF report**: the first pages of the [sample report](docs/sample-report.pdf) made from the demo log.
+![Tune plan](docs/img/plan.png)
+
+### Understand your tune
+
+| | |
+|---|---|
+| **PID simulator** | BBX learns your quad's real dynamics from the log (control authority, damping, motor lag from the eRPM) and runs Betaflight's PID loop with your actual filters against them. Change P, I, D, D max or FF and see the step response, a sudden kick and the stability margins. **✨ Suggest** searches around the gains you flew with and only proposes changes that keep overshoot, noise and phase margin in bounds, so pressing it twice never drifts. |
+| **Step response** | Rise time, overshoot and settling per axis, measured from your stick moves, with plain verdicts. |
+| **Tracking** | *Sticks vs gyro*, *PIDs vs gyro* and *Motors vs RPM* in one tab, on a synced timeline with a 3D replay quad and your video if you load it. |
+| **Propwash** | Every throttle chop is found, scored only while the sticks are still and rated *excellent* to *terrible*. Hover a chop to replay it on a 3D quad. |
+
+![PID simulator](docs/img/pidsim.png)
+
+### Understand your filters and noise
+
+| | |
+|---|---|
+| **Noise** | Noise spectrum per axis, raw against filtered, with the filter curves, frame resonances (stay at one frequency while motor noise moves with RPM) and a **filter planner** that proposes notches and predicts the effect on noise and delay before you fly. |
+| **Spectrogram** | Noise against time and throttle. With `debug_mode` FFT_FREQ, DYN_LPF or RPM_FILTER the logged notch and motor frequencies are drawn on top. |
+| **Filter delay** | Each filter's delay at the loop's crossover frequency as stacked bars, next to Betaflight's defaults (checked against the source) or those scaled to your prop size. Hover for why, and the exact phase margin after each possible change. |
+
+![Noise and filters](docs/img/noise.png)
+
+### Understand your hardware
+
+| | |
+|---|---|
+| **Motor health** | One card per motor: once-per-turn vibration (*"M3 vibrates 1.9× more than the others: unbalanced prop or bent shaft"*), load balance, speed for the same command, desyncs. |
+| **Battery** | Estimates the power lost to motors twitching, buzzing on noise and uneven load, shown on your own motor traces. No current sensor needed. |
+| **Quad profile** | Prop size, blade count and weight are estimated from the log (you can set them) so advice fits a 2.5″ whoop and a 10″ rig alike. |
+
+![Motor health](docs/img/health.png)
+
+### Compare and share
+
+- **Before → after.** Open two flights: BBX lists the settings you changed, what got better or worse, and what to try next.
+- **Avatar.** For fun: your flight is scored on eight axes and matched to one of 150 creatures, from dragons to a flying pig, next to a copy of your quad flying the same flight.
+
+| | |
+|---|---|
+| ![Spectrogram with frame resonances](docs/img/spectrogram.jpg) | ![Propwash chop replay](docs/img/propwash.png) |
+| ![Filter delay](docs/img/delay.png) | ![Tracking](docs/img/tracking.png) |
 
 ---
 

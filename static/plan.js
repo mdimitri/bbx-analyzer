@@ -29,24 +29,29 @@ async function renderPlan() {
             ${has ? `<div class="pcli">${it.cli.map(([k, v]) => `<code>${esc(k)} = ${esc(v)}</code>`).join("")}</div>` : ""}</div></div>`; }).join("")}</section>`; }).join("");
   const rows = [], seenK = new Set(), kh = S.keyH || {};
   items.filter(it => it.on && it.cli).forEach(it => it.cli.forEach(([k, v]) => { if (seenK.has(k)) return; seenK.add(k);
-    rows.push(`<tr><td><code>${esc(k)}</code></td><td>${esc(kh[k] ?? "–")}</td><td class="pnew">${esc(v)}</td><td>${esc(it.text)}</td></tr>`); }));
+    rows.push(`<tr><td><code>${esc(k)}</code></td><td>${esc(nowVal(k, kh))}</td><td class="pnew">${esc(v)}</td><td class="pw">${esc(it.text)}</td></tr>`); }));
   const nSteps = new Set(items.filter(it => it.on && it.cli && it.cli.length).map(it => it.step)).size;
   const head = `<div class="phead"><div class="phl">${rows.length ? `${rows.length} setting${rows.length > 1 ? "s" : ""} to change in ${nSteps} step${nSteps > 1 ? "s" : ""}` : "No setting changes ticked"}</div>
     ${rows.length ? `<table class="ptab"><tr><th>Setting</th><th>Now</th><th>Suggested</th><th>Why</th></tr>${rows.join("")}</table>` : ""}
-    <div class="hint">Details by step below · untick anything you disagree with</div></div>`;
-  $("findings").innerHTML = `<div class="plan">
-    <div class="pcol">${head}${P.notes.length ? `<div class="pnotes">${P.notes.map(n => `<div>⚠ ${esc(n)}</div>`).join("")}</div>` : ""}${stepHTML}</div>
-    <aside class="pside"><div class="fh">CLI for the ticked items</div>
-      ${cli.length > 1 ? `<details><summary class="hint">show CLI block</summary><pre class="cli" id="planCli">${esc(cli.join("\n"))}</pre></details><button class="btn sm" id="planCopy">Copy CLI</button>`
-        : `<div class="hint">Nothing ticked that changes a setting.</div>`}
-      <div class="hint" style="margin-top:6px">Paste into the Betaflight CLI tab. Typing exact PID values turns the simplified-tuning sliders off.</div>
-      <div class="fh" style="margin-top:14px">Next test flight</div><ol class="pchecklist">${P.checklist.map(c => `<li>${esc(c)}</li>`).join("")}</ol></aside></div>`;
+    <div class="hint">Suggestions by step below · untick anything you disagree with</div></div>`;
+  $("findings").innerHTML = `<div class="plan one">
+    <div class="pcol">${head}${stepHTML}
+      <details class="pdet"><summary>Details · warnings, CLI block and next test flight</summary>
+        ${P.notes.length ? `<div class="pnotes">${P.notes.map(n => `<div>⚠ ${esc(n)}</div>`).join("")}</div>` : ""}
+        <div class="fh">CLI for the ticked items</div>
+        ${cli.length > 1 ? `<pre class="cli" id="planCli">${esc(cli.join("\n"))}</pre><button class="btn sm" id="planCopy">Copy CLI</button>` : `<div class="hint">Nothing ticked that changes a setting.</div>`}
+        <div class="hint">Paste into the Betaflight CLI tab. Typing exact PID values turns the simplified-tuning sliders off.</div>
+        <div class="fh" style="margin-top:12px">Next test flight</div><ol class="pchecklist">${P.checklist.map(c => `<li>${esc(c)}</li>`).join("")}</ol></details></div></div>`;
   $("findings").querySelectorAll("[data-id]").forEach(cb => cb.onchange = () => { const s2 = planState(); s2.on[cb.dataset.id] = cb.checked; savePlan(s2); renderPlan(); });
   $("findings").querySelectorAll("[data-go]").forEach(a => a.onclick = () => document.querySelector(`#tabs [data-tab="${a.dataset.go}"]`).click());
   $("findings").querySelectorAll("[data-user]").forEach(b => b.onclick = () => { const s2 = planState(); s2[b.dataset.user] = null; savePlan(s2); renderPlan(); });
   if ($("planCopy")) $("planCopy").onclick = () => { navigator.clipboard && navigator.clipboard.writeText(cli.join("\n")); $("planCopy").textContent = "Copied ✓"; };
 }
 // the plan's items with the user's ticks, and their planner / simulator choices in place of the automatic proposal
+function nowVal(k, kh) {
+  const m = k.match(/^([pid])_(roll|pitch|yaw)$/); if (m) { const v = String(kh[m[2] + "PID"] || "").split(","); return v["pid".indexOf(m[1])] ?? "–"; }
+  const d = k.match(/^d_max_(roll|pitch|yaw)$/); if (d) return String(kh.d_max || "").split(",")[["roll", "pitch", "yaw"].indexOf(d[1])] ?? "–";
+  return kh[k] ?? "–"; }
 function planItems(P, st = planState()) {
   let items = P.items.map(it => ({ ...it, on: st.on[itemId(it)] ?? it.on }));
   if (st.filt) items = items.filter(it => !(it.step === "filters" && it.src === "filter planner"))

@@ -22,6 +22,8 @@
   <span class="grow"></span>
   <span id="range" class="range"></span>
   <button id="reset" class="btn ghost" hidden>Full log</button>
+  <button id="fbadge" class="fbadge" hidden data-tip="fbadge"></button>
+  <button id="tipsBtn" class="btn sm ghost tipsbtn">💡 Tips</button>
   <button id="propChip" class="btn propchip" data-tip="prop_chip" hidden></button>
   <button id="aboutBtn" class="btn ghost" title="About BBX">About</button>
   <button id="theme" class="btn ghost" title="Toggle theme">◐</button>
@@ -43,21 +45,18 @@
     <nav class="tabs" id="tabs">
       <button data-tab="summary" data-tip="tab_summary" class="on">Summary</button>
       <button data-tab="plan" data-tip="tab_plan">Tune plan</button>
+      <button data-tab="pidsim" data-tip="tab_sim">PID simulator</button>
       <button data-tab="compare" data-tip="compare" hidden>Compare</button>
       <button data-tab="tracking" data-tip="tab_tracking">Tracking</button>
       <button data-tab="pid" data-tip="tab_pid">PID terms</button>
       <button data-tab="motors" data-tip="tab_motors">Motors</button>
       <button data-tab="noise" data-tip="tab_noise">Noise</button>
-      <button data-tab="delay" data-tip="dly_tab">Filter delay</button>
       <button data-tab="spectro" data-tip="tab_spectro">Spectrogram</button>
+      <button data-tab="delay" data-tip="dly_tab">Filter delay</button>
       <button data-tab="step" data-tip="tab_step">Step response</button>
       <button data-tab="propwash" data-tip="tab_propwash">Propwash</button>
-      <button data-tab="pidsim" data-tip="tab_sim">PID simulator</button>
       <button data-tab="health" data-tip="tab_health">Motor health</button>
       <button data-tab="avatar" data-tip="tab_avatar">Avatar ✦</button>
-      <span class="grow"></span>
-      <button id="fbadge" class="fbadge" hidden data-tip="fbadge"></button>
-      <button id="tipsBtn" class="btn sm ghost tipsbtn">💡 Tips</button>
     </nav>
     <div class="subtabs" id="subtabs" hidden></div>
     <div class="card pad0 maincard">

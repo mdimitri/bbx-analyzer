@@ -743,3 +743,29 @@ body.grabbing, body.grabbing * { cursor: grabbing !important; user-select: none;
 .ptab th { text-align: left; font-weight: 500; color: var(--ink2); padding: 3px 8px; border-bottom: 1px solid var(--border); }
 .ptab td { padding: 4px 8px; border-bottom: 1px solid color-mix(in srgb, var(--border) 50%, transparent); vertical-align: top; }
 .ptab .pnew { color: var(--accent); font-weight: 600; }
+
+.plan.one { display: block; max-width: 980px; margin: 0 auto; }
+.pdet { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-top: 4px; }
+.pdet > summary { cursor: pointer; font-weight: 600; font-size: 13px; color: var(--ink2); }
+.pdet[open] > summary { margin-bottom: 10px; }
+
+/* ---- layout polish: tab groups, bigger type, one clear reading order ---- */
+body { font-size: 15px; }
+.tabs { gap: 2px; padding: 4px 0 2px; border-bottom: 1px solid var(--border); margin-bottom: 8px; }
+.tabs button { font-size: 14px; padding: 8px 12px; border-radius: 8px 8px 0 0; }
+.tabs button.on, .tabs button.gon { background: var(--surface); box-shadow: inset 0 -3px 0 var(--accent); }
+.tabs [data-tab="plan"], .tabs [data-tab="tracking"], .tabs [data-group="tracking"], .tabs [data-tab="avatar"] { margin-left: 14px; position: relative; }
+.tabs [data-tab="plan"]::before, .tabs [data-group="tracking"]::before, .tabs [data-tab="avatar"]::before { content: ""; position: absolute; left: -8px; top: 9px; bottom: 9px; width: 1px; background: var(--border); }
+.subtabs { margin-bottom: 10px; }
+.subtabs button { font-size: 13.5px; padding: 6px 14px; }
+.ptab { font-size: 13.5px; } .ptab td.pw { color: var(--ink2); text-align: left; } .ptab td:nth-child(2), .ptab td:nth-child(3) { text-align: left; white-space: nowrap; }
+.phl { font-size: 18px; }
+.ptitle { font-size: 15px; } .pwhy { font-size: 13px; }
+h3 { font-size: 12px; }
+.card, .tile { border-radius: 12px; }
+.fbadge { font-size: 13px; padding: 5px 12px; }
+.tabs button { font-size: 13.5px; padding: 8px 9px; }
+.tabs [data-tab="plan"], .tabs [data-group="tracking"], .tabs [data-tab="avatar"] { margin-left: 12px; }
+.tabs [data-tab="plan"]::before, .tabs [data-group="tracking"]::before, .tabs [data-tab="avatar"]::before { left: -7px; }
+.tabs [data-tab="tracking"] { margin-left: 0; } .tabs [data-tab="tracking"]::before { display: none; }
+select#file { max-width: 230px; } .bar { gap: 6px; } .bar .btn { padding: 4px 8px; }
