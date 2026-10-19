@@ -4,6 +4,8 @@
 const RPT = { fonts: null, lib: false };
 const RC = { ink: "#14161b", ink2: "#4b5060", muted: "#8a8f9c", line: "#dfe2e8", soft: "#f4f6f9", accent: "#3987e5", amber: "#ffb340", dark: "#0c0e13",
   good: "#14a44d", info: "#2a78d6", warning: "#e09b00", serious: "#d03b3b", ax: ["#2a78d6", "#eb6834", "#1baf7a"] };
+// which way is better, printed next to every metric: ↑ higher is better, ↓ lower is better (DejaVu Sans has both arrows)
+const UP = "↑", DN = "↓";
 const LVL = { good: "Good", info: "Info", warning: "Check", serious: "Fix" };
 // long Betaflight names (BTFL_BLACKBOX_LOG_<craft>_<date>_<time>_<board>.BBL) shortened to fit a header: keep date and time
 const shortName = n => { n = String(n || ""); if (n.length <= 34) return n; const m = n.match(/(\d{8})_(\d{6})/); return m ? `${m[1].slice(0, 4)}-${m[1].slice(4, 6)}-${m[1].slice(6)} ${m[2].slice(0, 2)}:${m[2].slice(2, 4)} · …${n.slice(-12)}` : n.slice(0, 18) + "…" + n.slice(-14); };
@@ -102,7 +104,7 @@ async function propwashChart(R) {
   const P = R.propwash; if (!P || !P.events || !P.events.length) return null;
   const C = { excellent: RC.good, good: "#5bbf6a", ok: RC.warning, bad: "#e8743b", terrible: RC.serious };
   const tr = Object.keys(C).map(c => { const e = P.events.filter(x => x.cls === c); return { type: "bar", x: e.map(x => x.t), y: e.map(x => x.ratio), name: c, marker: { color: C[c] }, width: 1.5 }; }).filter(t => t.x.length);
-  return chartPNG(tr, { barmode: "overlay", xaxis: { title: { text: "flight time (s)", font: { size: 10 } } }, yaxis: { title: { text: "wobble × calm", font: { size: 10 } } },
+  return chartPNG(tr, { barmode: "overlay", xaxis: { title: { text: "flight time (s)", font: { size: 10 } } }, yaxis: { title: { text: "wobble × calm (↓ better)", font: { size: 10 } } },
     shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: "#9aa0ad", dash: "dot", width: 1 } }] }, 1600, 380);
 }
 async function compareChart(C) {
@@ -139,7 +141,7 @@ async function pidChart(R) {
   const terms = [["P", "#2a78d6"], ["I", "#7a5af5"], ["D", "#eb6834"], ["FF", "#1baf7a"]], xs = AX.slice(0, 3);
   const tr = terms.map(([k, c]) => ({ type: "bar", orientation: "h", y: xs, x: [0, 1, 2].map(i => (P[i] && P[i].rms && P[i].rms[k]) || 0), name: k === "FF" ? "feedforward" : k, marker: { color: c },
     text: [0, 1, 2].map(i => { const v = P[i] && P[i].rms && P[i].rms[k]; return v >= 1.5 ? v.toFixed(1) : ""; }), textposition: "inside", insidetextanchor: "middle", textfont: { color: "#fff", size: 10 } }));
-  return chartPNG(tr, { barmode: "stack", yaxis: { autorange: "reversed" }, xaxis: { title: { text: "RMS output (PID units, ÷10 = % motor)", font: { size: 10 } } }, margin: { l: 50, r: 10, t: 24, b: 34 } }, 1600, 300);
+  return chartPNG(tr, { barmode: "stack", yaxis: { autorange: "reversed" }, xaxis: { title: { text: "RMS output (PID units, ÷10 = % motor) · ↓ less effort", font: { size: 10 } } }, margin: { l: 50, r: 10, t: 24, b: 34 } }, 1600, 300);
 }
 // noise by throttle: raw vs filtered gyro, one shared colour scale, the motors' own frequency as a line
 async function spectroChart(R) {
@@ -158,7 +160,7 @@ async function delayChart(R) {
   const D = R.delay; if (!D) return null; const tr = [], L = { barmode: "stack", showlegend: false, annotations: [], margin: { l: 70, r: 10, t: 26, b: 34 } };
   const VC = { good: RC.good, warning: RC.warning, serious: RC.serious, inactive: "#c4c8d0" }, axes = ["roll", "pitch"].filter(a => D.axes[a]);
   axes.forEach((a, j) => { const A = D.axes[a], s = j ? j + 1 : "", x0 = j * 0.52, cats = ["D · ref.", "D · yours", "P · ref.", "P · yours"];
-    L[`xaxis${s}`] = { domain: [x0, x0 + 0.46], anchor: `y${s}`, title: { text: `ms at the ${A.fc.toFixed(0)} Hz crossover`, font: { size: 9 } }, rangemode: "tozero" };
+    L[`xaxis${s}`] = { domain: [x0, x0 + 0.46], anchor: `y${s}`, title: { text: `ms at the ${A.fc.toFixed(0)} Hz crossover (↓ better)`, font: { size: 9 } }, rangemode: "tozero" };
     L[`yaxis${s}`] = { anchor: `x${s}`, categoryorder: "array", categoryarray: cats, showticklabels: true };
     L.annotations.push({ text: `<b>${a[0].toUpperCase() + a.slice(1)}</b>`, xref: "paper", yref: "paper", x: x0, y: 1.02, xanchor: "left", yanchor: "bottom", showarrow: false, font: { size: 11, color: RC.ax[a === "roll" ? 0 : 1] } });
     const add = (y, ms, col, lab, light) => tr.push({ type: "bar", orientation: "h", y: [y], x: [ms], xaxis: `x${s}`, yaxis: `y${s}`, marker: { color: col, line: { color: "#fff", width: 1.5 } },
@@ -175,7 +177,7 @@ async function propwashChart(R) {
   const P = R.propwash; if (!P || !P.events || !P.events.length) return null;
   const C = { excellent: RC.good, good: "#5bbf6a", ok: RC.warning, bad: "#e8743b", terrible: RC.serious };
   const tr = Object.keys(C).map(c => { const e = P.events.filter(x => x.cls === c); return { type: "bar", x: e.map(x => x.t), y: e.map(x => x.ratio), name: c, marker: { color: C[c] }, width: 1.5 }; }).filter(t => t.x.length);
-  return chartPNG(tr, { barmode: "overlay", xaxis: { title: { text: "flight time (s)", font: { size: 10 } } }, yaxis: { title: { text: "wobble × calm", font: { size: 10 } } },
+  return chartPNG(tr, { barmode: "overlay", xaxis: { title: { text: "flight time (s)", font: { size: 10 } } }, yaxis: { title: { text: "wobble × calm (↓ better)", font: { size: 10 } } },
     shapes: [{ type: "line", xref: "paper", x0: 0, x1: 1, y0: 1, y1: 1, line: { color: "#9aa0ad", dash: "dot", width: 1 } }] }, 1600, 340);
 }
 // motor balance: how far each motor's command and speed sit from the average
@@ -207,26 +209,27 @@ async function makeReport() {
       L.y = 44;
       // profile tiles
       const u = R.profile.used, D = R.profile.derived || {}, E = R.profile.estimate || {};
-      const tiles = [["Props", `${u.inch}″ × ${u.blades}`, u.source === "user" ? "set by you" : "estimated"], ["All-up weight", `${Math.round(u.auw_kg * 1000)} g`, u.auw_source === "user" ? "set by you" : "estimated"],
-        ["Hover", E.hover_hz ? `${Math.round(E.hover_hz)} Hz` : "–", E.hover_cmd != null ? `${E.hover_cmd}% motor command` : ""], ["Hover power", D.hover_w ? `≈${D.hover_w} W` : "–", "momentum theory"],
-        ["Thrust / weight", D.twr ? `${D.twr}×` : "–", D.twr_how === "extrapolated" ? "extrapolated" : "measured"]];
+      const tiles = [["Props", `${u.inch}″ × ${u.blades}`, u.source === "user" ? "set by you" : "estimated"], ["All-up weight", `${Math.round(u.auw_kg * 1000)} g ${DN}`, (u.auw_source === "user" ? "set by you" : "estimated") + " · lower is better"],
+        ["Hover", E.hover_hz ? `${Math.round(E.hover_hz)} Hz` : "–", E.hover_cmd != null ? `${E.hover_cmd}% motor command` : ""], ["Hover power", D.hover_w ? `≈${D.hover_w} W ${DN}` : "–", "estimate · lower is better"],
+        ["Thrust / weight", D.twr ? `${D.twr}× ${UP}` : "–", (D.twr_how === "extrapolated" ? "extrapolated" : "measured") + " · higher is better"]];
       const tw = (CW - 4 * 3) / 5;
       tiles.forEach(([k, v, s], i) => { const x = M + i * (tw + 3); L.color(RC.soft, "fill"); doc.roundedRect(x, L.y, tw, 19, 2, 2, "F");
         L.font(7, true); L.color(RC.muted); doc.text(k.toUpperCase(), x + 3, L.y + 5); L.font(12.5, true); L.color(RC.ink); doc.text(v, x + 3, L.y + 11.5); L.font(6.8); L.color(RC.ink2); doc.text(s, x + 3, L.y + 16); });
       L.y += 26;
       // key numbers
-      L.h2("Key numbers");
+      L.h2("Key numbers"); L.font(7.6); L.color(RC.muted); doc.text("↑ higher is better · ↓ lower is better (shown next to every metric in this report)", M + CW, L.y - 3, { align: "right" });
       const sc = R.score, rows = [
-        ["Noise left after the gyro filters", sc.gyro_hf, "°/s RMS"], ["D-term noise", sc.dterm_hf, ""], ["Noise reaching the motors", sc.motor_hf, "% RMS"],
-        ["Filter delay: gyro / D-term", sc.delay_gyro != null ? `${sc.delay_gyro} / ${sc.delay_dterm}` : null, "ms"],
-        ["Overshoot: roll / pitch / yaw", ["roll", "pitch", "yaw"].map(a => sc[`os_${a}`] ?? "–").join(" / "), "%"],
-        ["Rise time: roll / pitch / yaw", ["roll", "pitch", "yaw"].map(a => sc[`rise_${a}`] ?? "–").join(" / "), "ms"],
-        ["Propwash: median wobble after a chop", sc.pw_ratio, `× calm (${sc.pw_n || 0} chops, ${sc.pw_bad ?? 0}% bad)`],
-        ["Battery wasted holding attitude", sc.batt_waste, "%"]].filter(r => r[1] != null);
+        ["Noise left after the gyro filters", sc.gyro_hf, "°/s RMS", DN], ["D-term noise", sc.dterm_hf, "", DN], ["Noise reaching the motors", sc.motor_hf, "% RMS", DN],
+        ["Filter delay: gyro / D-term", sc.delay_gyro != null ? `${sc.delay_gyro} / ${sc.delay_dterm}` : null, "ms", DN],
+        ["Overshoot: roll / pitch / yaw", ["roll", "pitch", "yaw"].map(a => sc[`os_${a}`] ?? "–").join(" / "), "%", DN],
+        ["Rise time: roll / pitch / yaw", ["roll", "pitch", "yaw"].map(a => sc[`rise_${a}`] ?? "–").join(" / "), "ms", DN],
+        ["Propwash: median wobble after a chop", sc.pw_ratio, `× calm (${sc.pw_n || 0} chops, ${sc.pw_bad ?? 0}% bad)`, DN],
+        ["Battery wasted holding attitude", sc.batt_waste, "%", DN]].filter(r => r[1] != null);
       const colW = [CW * 0.55, CW * 0.45];
-      rows.forEach(([k, v, unit], i) => { L.need(6); if (i % 2 === 0) { L.color(RC.soft, "fill"); doc.rect(M, L.y - 1, CW, 6, "F"); }
+      rows.forEach(([k, v, unit, dir], i) => { L.need(6); if (i % 2 === 0) { L.color(RC.soft, "fill"); doc.rect(M, L.y - 1, CW, 6, "F"); }
         L.font(8.8); L.color(RC.ink2); doc.text(k, M + 2, L.y + 3); L.font(8.8, true); L.color(RC.ink); doc.text(`${v}`, M + colW[0], L.y + 3);
-        const vw = doc.getTextWidth(`${v}`); L.font(8); L.color(RC.muted); doc.text(unit, M + colW[0] + vw + 1.5, L.y + 3); L.y += 6; });
+        const vw = doc.getTextWidth(`${v}`); L.font(8); L.color(RC.muted); doc.text(unit, M + colW[0] + vw + 1.5, L.y + 3);
+        L.font(9.5, true); L.color(dir === UP ? RC.good : RC.accent); doc.text(dir || "", M + CW - 4, L.y + 3, { align: "right" }); L.y += 6; });
       L.y += 3;
       // step verdicts
       if (R.step) { L.need(8); let x = M; L.font(8.5, true); L.color(RC.ink); doc.text("Tune verdict:", x, L.y + 3); x += 24;
@@ -248,10 +251,10 @@ async function makeReport() {
       L.section("Stick response & the PID", "How the quad follows your sticks, and what each PID term contributes");
       img(cs, CW * 0.325, "Step response", "Median reaction to your stick moves (1.0 = exactly what you asked).");
       if (R.step) { const m = i => (R.step.axes[i] || {}).metrics || {}, n = i => (R.step.axes[i] || {}).n;
-        L.table(["", "rise", "overshoot", "settles", "latency", "moves", "verdict"], [0, 1, 2].map(i => [AX[i], `${f1(m(i).rise_ms)} ms`, `${f1(m(i).overshoot_pct)} %`, `${f0(m(i).settle_ms)} ms`, `${f1(m(i).latency_ms)} ms`, n(i) ?? "–", (R.step.axes[i] || {}).verdict || "–"]),
+        L.table(["", `rise ${DN}`, `overshoot ${DN}`, `settles ${DN}`, `latency ${DN}`, "moves", "verdict"], [0, 1, 2].map(i => [AX[i], `${f1(m(i).rise_ms)} ms`, `${f1(m(i).overshoot_pct)} %`, `${f0(m(i).settle_ms)} ms`, `${f1(m(i).latency_ms)} ms`, n(i) ?? "–", (R.step.axes[i] || {}).verdict || "–"]),
           [0.14, 0.14, 0.14, 0.14, 0.14, 0.12, 0.18], { colors: [0, 1, 2].map(i => [RC.ax[i]]) }); }
       img(cpid, CW * 0.165, "What each PID term puts out", "Size of each term's output over the flight. P and D fight disturbances, I holds trims, feedforward follows the sticks.");
-      if (R.pidterms) L.table(["", "D noise > 100 Hz", "P noise > 100 Hz", "output at the limit"], [0, 1, 2].map(i => { const a = R.pidterms[i] || {}; return [AX[i], f1(a.d_hf), f1(a.p_hf), a.sat_pct == null ? "–" : `${f1(a.sat_pct)} %`]; }),
+      if (R.pidterms) L.table(["", `D noise > 100 Hz ${DN}`, `P noise > 100 Hz ${DN}`, `output at the limit ${DN}`], [0, 1, 2].map(i => { const a = R.pidterms[i] || {}; return [AX[i], f1(a.d_hf), f1(a.p_hf), a.sat_pct == null ? "–" : `${f1(a.sat_pct)} %`]; }),
         [0.2, 0.27, 0.27, 0.26], { colors: [0, 1, 2].map(i => [RC.ax[i]]) });
       // ---------- noise and filters
       L.section("Noise & filters", "Where the vibration is, what the filters leave, and what their delay costs the PID");
@@ -259,28 +262,28 @@ async function makeReport() {
       img(csp, CW * 0.29, "Noise by throttle (roll + pitch)", "Each row is a throttle band; the dotted line is the motors' own frequency. Lines that follow it are motor noise (the RPM filter's job); fixed vertical lines are frame resonances.");
       if (R.delay) { const Dl = R.delay;
         img(cdl, CW * 0.2375, `Filter delay at the crossover · yours vs ${Dl.ref_label.toLowerCase()}`, "Each segment is one filter's delay where stability is decided. Green: like the reference or lighter; amber: up to 1.5× heavier; red: more than 1.5×. P path = what P and I see; D path adds the D-term filters.");
-        L.table(["", "crossover", "phase margin", "model range", "reference filters", "no filters", "filters take"], Object.entries(Dl.axes).map(([a, A]) => [a[0].toUpperCase() + a.slice(1), `${f1(A.fc)} Hz`, `${f0(A.margins.now.pm)}°`,
+        L.table(["", "crossover", `phase margin ${UP}`, `model range ${UP}`, `reference filters ${UP}`, `no filters ${UP}`, `filters take ${DN}`], Object.entries(Dl.axes).map(([a, A]) => [a[0].toUpperCase() + a.slice(1), `${f1(A.fc)} Hz`, `${f0(A.margins.now.pm)}°`,
           A.pm_range ? `${f0(A.pm_range[0])}–${f0(A.pm_range[1])}°` : "–", `${f0(A.margins.typical.pm)}°`, `${f0(A.margins.none.pm)}°`, `${f0(A.phase_used)}°`]),
           [0.12, 0.13, 0.15, 0.15, 0.17, 0.13, 0.15], { colors: Object.values(Dl.axes).map(A => [null, null, RC[A.margins.now.pm >= 45 ? "good" : A.margins.now.pm >= 30 ? "warning" : "serious"]]) });
         L.para("Phase margin: how far the loop is from oscillating at the crossover (≥ 45° healthy, 30–45° rings a little, below 30° rings clearly). The model range is the margin over equally good fits with the motor lag at ±15% of its eRPM measurement.", { size: 7.6, color: RC.muted, gap: 3 }); }
       // ---------- propwash and stability
       L.section("Propwash & stability", "The wobble after throttle chops, and whether anything oscillates on its own");
       img(cp, CW * 0.21, "Propwash: wobble after each throttle chop", `× the calm level; dotted = calm.${R.propwash && R.propwash.pw_freq ? ` The wobble rings at about ${R.propwash.pw_freq} Hz.` : ""}`);
-      if (R.propwash && R.propwash.axes) L.table(["", "tracking lag", "error while moving", "error when calm"], [0, 1, 2].map(i => { const a = R.propwash.axes[i] || {}; return [AX[i], `${f1(a.lag_ms)} ms`, `${f1(a.err_move)} °/s`, `${f1(a.err_calm)} °/s`]; }),
+      if (R.propwash && R.propwash.axes) L.table(["", `tracking lag ${DN}`, `error while moving ${DN}`, `error when calm ${DN}`], [0, 1, 2].map(i => { const a = R.propwash.axes[i] || {}; return [AX[i], `${f1(a.lag_ms)} ms`, `${f1(a.err_move)} °/s`, `${f1(a.err_calm)} °/s`]; }),
         [0.2, 0.26, 0.27, 0.27], { colors: [0, 1, 2].map(i => [RC.ax[i]]) });
       const calm = R.delay && R.delay.check && R.delay.check.calm;
-      if (calm) L.table(["", "strongest 10–40 Hz wobble, sticks centred", "size", "stands out by", ""], Object.entries(calm).map(([a, o]) => [a[0].toUpperCase() + a.slice(1), `${o.f} Hz`, `${o.rms} °/s`, `${o.prom_db} dB`,
+      if (calm) L.table(["", "strongest 10–40 Hz wobble, sticks centred", `size ${DN}`, `stands out by ${DN}`, ""], Object.entries(calm).map(([a, o]) => [a[0].toUpperCase() + a.slice(1), `${o.f} Hz`, `${o.rms} °/s`, `${o.prom_db} dB`,
         o.prom_db >= 12 ? "self-sustained oscillation" : "none"]), [0.14, 0.32, 0.14, 0.16, 0.24], { colors: Object.values(calm).map(o => [null, null, null, null, o.prom_db >= 12 ? RC.serious : RC.good]) });
       // ---------- motors and power
       if (cm || R.power) { L.section("Motors & power", "Balance between the motors and where the battery goes");
         img(cm, CW * 0.2, "Motor balance", "A motor that needs more command than the others, or spins faster, points to a heavier corner, a bent prop or a tired motor (positions as Betaflight numbers them).");
         if (R.power) { const pp = R.power.parts || {}, T = R.power;
-          L.table(["hover command", "thrust / weight", "extra power: steady imbalance", "manoeuvres", "corrections", "vibration"], [[T.hover_cmd != null ? `${f1(T.hover_cmd)} %` : "–", T.tw ? `${f1(T.tw)}×` : "–",
+          L.table([`hover command ${DN}`, `thrust / weight ${UP}`, `extra power: steady imbalance ${DN}`, `manoeuvres ${DN}`, `corrections ${DN}`, `vibration ${DN}`], [[T.hover_cmd != null ? `${f1(T.hover_cmd)} %` : "–", T.tw ? `${f1(T.tw)}×` : "–",
             `${f1(pp.steady)} %`, `${f1(pp.manoeuvre)} %`, `${f1(pp.correction)} %`, `${f1(pp.vibration)} %`]], [0.14, 0.14, 0.24, 0.16, 0.16, 0.16], { zebra: false }); } }
       // ---------- the learned model
       if (R.model && R.model.axes) { const Mo = R.model, md = Mo.motor, ty = (Mo.typical && Mo.typical.axes) || {};
         L.section("This quad's dynamics", "Learned from the flight: what the PID simulator and the filter-delay analysis run on");
-        L.table(["", "authority", "typical for the size", "motor lag", "system delay", "damping", "fit", "sticks excited up to"], Object.entries(Mo.axes).map(([a, r]) => [a[0].toUpperCase() + a.slice(1), f0(r.b),
+        L.table(["", `authority ${UP}`, "typical for the size", `motor lag ${DN}`, `system delay ${DN}`, "damping", `fit ${UP}`, `sticks excited up to ${UP}`], Object.entries(Mo.axes).map(([a, r]) => [a[0].toUpperCase() + a.slice(1), f0(r.b),
           ty[a] ? f0(ty[a].b_typ) : "–", `${f0(r.tau_ms)} ms`, `${f1(r.delay_ms)} ms`, f1(r.a), r.fit_pct == null ? "–" : `${f0(r.fit_pct)} %`, r.excited_hz ? `${f0(r.excited_hz)} Hz` : "–"]),
           [0.1, 0.12, 0.16, 0.12, 0.13, 0.1, 0.09, 0.18]);
         if (md) L.para(`Motor lag measured from motor command vs eRPM: ${md.tau_ms} ms at ${f0(md.hz)} Hz (${f0(md.hz * 60)} RPM)${md.law && md.law.length > 1 ? `, ${md.law.map(l => `${f0(l[1])} ms at ${f0(l[0])} Hz`).join(", ")}` : ""}. Each axis may refine it by at most ±${Math.round((md.room || 0.15) * 100)}%: stick inputs alone can't tell motor lag from authority.`, { size: 7.8, gap: 3 }); }
@@ -313,7 +316,7 @@ async function makeReport() {
         const V = { better: RC.good, worse: RC.serious, same: RC.muted, changed: RC.info };
         C.rows.forEach((r, i) => { L.need(6); if (i % 2 === 0) { L.color(RC.soft, "fill"); doc.rect(M, L.y - 1, CW, 5.6, "F"); }
           const f = v => v == null ? "–" : Math.abs(v) >= 100 ? Math.round(v) : +(+v).toFixed(2);
-          L.font(8.3); L.color(RC.ink2); doc.text(r.label, M + 2, L.y + 3); L.color(RC.ink); doc.text(`${f(r.a)}  →  ${f(r.b)} ${r.unit}`, M + CW * 0.55, L.y + 3);
+          L.font(8.3); L.color(RC.ink2); doc.text(r.label + (r.dir > 0 ? " ↑" : r.dir < 0 ? " ↓" : ""), M + 2, L.y + 3); L.color(RC.ink); doc.text(`${f(r.a)}  →  ${f(r.b)} ${r.unit}`, M + CW * 0.55, L.y + 3);
           if (r.verdict) L.pill(M + CW - 18, L.y + 3.2, r.verdict, V[r.verdict] || RC.info); L.y += 5.6; });
         L.y += 3; L.h2("Ideas for the next step"); C.ideas.forEach(x => { L.para(x.title, { size: 9, bold: true, color: RC.ink, gap: 0.5 }); L.para(x.text, { size: 8.2, gap: 2.2 }); }); }
       // ---------- all findings

@@ -33,7 +33,7 @@ After that it's cached as `logs/<name>.<n>.npz` and loads in under half a second
 | `static/delay.js`, `plan.js`, `compare.js`, `report.js` | Filter delay tab, Tune plan, Before → after, PDF report (jsPDF + DejaVu fonts in `static/vendor/`) |
 | `static/pidsim.js` | browser-side closed-loop simulation at the PID loop rate, loop margins / sensitivity, auto-suggest |
 | `static/player.js`, `timesync.js`, `video.js` | playback + 3D viewer, synced time navigation, DVR video |
-| `static/world.js`, `world3d.js`, `livecharts.js`, `demo.js`, `vendor/three.module.min.js` | the no-log splash: procedural toy world (100 object kinds), its autopilot and tricks, the Three.js renderer, the live plots |
+| `static/creatures.js`, `creature3d.js` (Creature tab: 129 creatures, 8-axis `quadScores`, nearest-match, procedural 3D flier), `static/world.js`, `world3d.js`, `livecharts.js`, `demo.js`, `vendor/three.module.min.js` | the no-log splash: procedural toy world (100 object kinds), its autopilot and tricks, the Three.js renderer, the live plots |
 | `static/planner.js`, `behaviour.js` | filter planner (Noise tab), PID-term behaviour |
 | `static/glossary.js` | tooltip texts (TL;DR + detail) and sidebar grouping |
 | `tools/release.py` | release checks, screenshots / banner / sample report from the app, the zip |
@@ -167,3 +167,10 @@ stability, motors & power, the learned dynamics, the tune plan with its CLI, bef
 
 ## Licence
 © Martin Dimitrievski. Free to use, reuse, modify and share for non-commercial purposes; see `LICENSE`.
+
+
+## 2.5 additions
+
+- **Splash world:** `world.js` also builds routes and agents (cars on clockwise per-block loops, ring-road lanes, out-and-back radials, sidewalk walkers, bike lanes); `agentPose` gives position/heading per clock. `world3d.js` renders monochrome (shaded greys, barycentric edge shader, per-vertex texture ids for windows/roofs/glass) with road markings drawn analytically in the terrain shader. Scale factor QS = 3.
+- **Creature tab:** `quadScores(R, stats)` maps log metrics to 8 axes (0-99); `crMatch` ranks creatures by RMS gap, similarity `100*exp(-d/28)`.
+- **Summary:** collapsible cards (state kept in `sumOpen`), filter-latency card. **Tracking:** `timesync.js` drag-scroll over the whole plot area. **Arrows:** ▲/▼ helpers `DIR` (UI) and `UP`/`DN` (PDF).

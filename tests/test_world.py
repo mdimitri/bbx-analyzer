@@ -17,6 +17,9 @@ def test_world_and_flights():
     assert r["kinds"] == 100 and r["unique"] == 100
     assert r["used"] == 100 and r["minCount"] >= 2
     assert r["same"]
+    a = r["ag"]                                              # traffic and people: plenty of them, finite poses, cars on roads, walkers on the pavement
+    assert a["n"] >= 100 and a["bad"] == 0 and a["walkers"] > 0 and a["bikes"] > 0
+    assert a["carsOnRoad"] / a["cars"] > 0.97 and a["walkersOffRoad"] / a["walkers"] > 0.97
     for f in r["flights"]:
         assert f["hits"] == 0 and f["finite"] and f["tricks"] > 0
         assert 12 < f["speed"] < 30                          # a believable freestyle pace, not a crawl

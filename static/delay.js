@@ -50,7 +50,7 @@ const specCompact = rows => {
 };
 function wiTable(r, fc, cli) {
   if (!r.whatif || !r.whatif.length) return "";
-  return `<table class="dwi"><tr><th>if you change it to…</th><th>this block</th><th>phase margin</th>${cli ? "<th>CLI</th>" : ""}</tr>${r.whatif.map(w => {
+  return `<table class="dwi"><tr><th>if you change it to…</th><th>this block ${DIR.lo}</th><th>phase margin ${DIR.hi}</th>${cli ? "<th>CLI</th>" : ""}</tr>${r.whatif.map(w => {
     const lv = w.d_pm == null ? "" : w.d_pm >= 1.5 ? "up" : w.d_pm <= -1.5 ? "dn" : "";
     return `<tr class="${lv}"><td>${esc(w.label)}</td><td>${w.ms.toFixed(2)} ms <small>(${sgn(w.d_ms)})</small></td>
       <td>${w.pm == null ? "–" : w.pm.toFixed(0) + "°"} <small>${w.d_pm == null ? "" : `(${sgn(w.d_pm, 1)}°)`}</small></td>
@@ -150,7 +150,7 @@ async function drawDelay(D, A, ai) {
   tr.push({ type: "scatter", mode: "markers", x: [1], y: [A.sweep[0].noise[i1]], xaxis: "x3", yaxis: "y3", marker: { size: 10, color: css("--ink"), line: { color: css("--surface"), width: 2 } }, hovertemplate: `now: %{y:.2f}%<extra></extra>` });
   L.xaxis2 = { ...L.xaxis2, type: "log", title: { text: "low-pass cutoffs × (left = more filtering)", font: { size: 10 }, standoff: 2 }, tickvals: [0.5, 0.7, 1, 1.4, 2], ticktext: ["×0.5", "×0.7", "×1", "×1.4", "×2"] };
   L.xaxis3 = { ...L.xaxis3, type: "log", title: { text: "low-pass cutoffs ×", font: { size: 10 }, standoff: 2 }, tickvals: [0.5, 0.7, 1, 1.4, 2], ticktext: ["×0.5", "×0.7", "×1", "×1.4", "×2"] };
-  L.yaxis2.title = { text: "phase margin (°)", font: { size: 10 }, standoff: 2 }; L.yaxis3.title = { text: "motor noise > 80 Hz (%)", font: { size: 10 }, standoff: 2 };
+  L.yaxis2.title = { text: "phase margin (°) ↑ better", font: { size: 10 }, standoff: 2 }; L.yaxis3.title = { text: "motor noise > 80 Hz (%) ↓ better", font: { size: 10 }, standoff: 2 };
   L.shapes = [{ type: "line", xref: "x2", yref: "y2", x0: 0.5, x1: 2, y0: 45, y1: 45, line: { color: css("--good"), dash: "dash", width: 1 } }];
   L.annotations.push({ text: "45° target", xref: "x2", yref: "y2", x: Math.log10(0.52), y: 45, xanchor: "left", yanchor: "bottom", showarrow: false, font: { size: 9, color: css("--good-ink") } });
   title(2, `Phase margin if the low-pass filters change`, "Each line scales the low-pass cutoffs of one chain (or both) on this axis; the dot is your current setup.");
@@ -230,7 +230,7 @@ function delayPanel(D, A, ai) {
       ${tile("Disturbance peak", m.now.ms == null ? "–" : "×" + m.now.ms.toFixed(1), m.now.f_ms ? `around ${m.now.f_ms.toFixed(0)} Hz` : "", m.now.ms > 2.5 ? "warning" : m.now.ms > 1.8 ? "info" : "good", "dly_ms")}
     </div>
     <div class="fh" data-tip="dly_blocks">Filter blocks at the ${fc.toFixed(1)} Hz crossover <span class="hint">· yours vs ${refL.toLowerCase()} · click a row for why, all the numbers and what a change would do</span></div>
-    <table class="dblk"><tr><th>Block</th><th>Yours</th><th>${refL}</th><th class="num">Delay yours / ref.</th><th></th></tr>${blk}</table>
+    <table class="dblk"><tr><th>Block</th><th>Yours</th><th>${refL}</th><th class="num">Delay yours / ref. ${DIR.lo}</th><th></th></tr>${blk}</table>
     <table class="cmp dhead" data-tip="dly_head"><tr><th>P &amp; D can scale…</th><th></th></tr>
       <tr><td>with your filters</td><td>${hTxt(H.now)}</td></tr><tr><td>with the reference filters</td><td>${hTxt(H.typical)}</td></tr><tr><td>without filters</td><td>${hTxt(H.none)}</td></tr></table>
     ${conf}

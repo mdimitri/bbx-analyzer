@@ -326,7 +326,7 @@ def compare(lgA, lgB, ga, gb):
         a, b = A.get(key), B.get(key)
         if a is None and b is None:
             continue
-        rows.append(dict(key=key, label=lab, unit=unit, a=a, b=b, verdict=_verdict(key, a, b, better, thr, unit), tab=tab))
+        rows.append(dict(key=key, label=lab, unit=unit, dir=better, a=a, b=b, verdict=_verdict(key, a, b, better, thr, unit), tab=tab))
     ha, hb = lgA.headers, lgB.headers
     changed = [dict(key=k, a=str(ha.get(k, "–")), b=str(hb.get(k, "–"))) for k in SETTING_KEYS if str(ha.get(k, "–")) != str(hb.get(k, "–"))]
     same_craft = str(ha.get("Craft name", "")) == str(hb.get("Craft name", ""))

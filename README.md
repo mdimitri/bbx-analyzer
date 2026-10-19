@@ -2,7 +2,7 @@
 
 **BBX Analyzer** reads your Betaflight blackbox logs and tells you, in plain words, what is going on with your quad and what to try next. It covers noise and filters, frame resonances, the tune, propwash, and motor and prop health. Every finding comes from your own log, and each fix comes with the CLI lines.
 
-It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 2.4** ([what's new](CHANGELOG.md)).
+It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 2.5** ([what's new](CHANGELOG.md)).
 
 ---
 
@@ -30,10 +30,13 @@ After the first start you also get a **BBX Analyzer** shortcut with its icon: on
 
 If you know Blackbox Explorer or PIDtoolbox, you already have traces, spectra, spectrograms and step responses. BBX has those too, and adds the parts that answer *"so what do I change?"*:
 
-- 🛸 **Something to look at while you wait.** With no log open, a quad flies freestyle lines and tricks, in wind, around a procedural wireframe toy town (street grid, parks, ring road, districts and forest) of 100 kinds of houses, towers, trees, ramps, gates and cars, and flies for ever without a cut, with a live view of the pilot's sticks and motor, PID and spectrogram plots drawn like the analyzer's own.
+- 🛸 **Something to look at while you wait.** With no log open, a quad flies freestyle lines and tricks, in wind, around a black-and-white shaded wireframe toy town (street grid with lane markings, ring road, parks, forest, textured houses and towers) at true scale, with cars driving the roads and people walking and cycling. Trick names, sticks and live plots on top.
 
 ![The splash screen: the quad in its toy world](docs/img/splash.png)
 
+- 🐉 **The Creature tab.** A fun one: BBX scores how your quad flew on eight axes (speed, power, agility, nimbleness, endurance, climb, steadiness, smoothness), matches it to the most alike of 129 mythical creatures and shows that creature in 3D, rotatable, flying with your quad's characteristics through wind particles, with radar and stats beside it.
+- 📂 **Collapsible summary cards.** Each card opens with its visual and main findings; expand it for the rest. A filter-latency card sits with them.
+- ↕️ **Better/worse arrows.** Every metric, in the app and the PDF, carries ▲ or ▼ to show which direction is better.
 - 🗺️ **One tune plan.** Every suggestion from every analysis, in the order to apply it (logging → mechanical → filters → PIDs → feedforward), with conflicts resolved and one CLI block to paste. Tick what you want; choices from the filter planner or the PID simulator can replace the automatic proposal.
 - ⏱️ **Filter delay, explained.** Every filter's delay at the loop's crossover frequency as stacked bars, next to Betaflight's firmware defaults (checked against the Betaflight source) or those defaults scaled for your prop size. Hover a filter for its settings next to the reference's, why it delays that much, and the exact phase margin after each possible change, with the CLI lines. Also: phase margin with and without filters, how far P and D could go, and what lighter or heavier filtering would cost in motor noise.
 - 🎯 **Is it on the edge?** BBX checks whether an axis wobbles on its own while the sticks are centred, and whether that wobble sits where the loop model says the margin runs out. When both agree, the axis needs less P/D or lighter filtering.
@@ -64,6 +67,8 @@ If you know Blackbox Explorer or PIDtoolbox, you already have traces, spectra, s
 | **Motor health**: one card per motor, where it sits on the frame | **Battery**: the real motor trace vs the battery-optimal line |
 | ![Noise and filters](docs/img/noise.png) | ![Tracking with the 3D viewer](docs/img/tracking.png) |
 | **Noise & filters**: raw vs filtered, filter shapes, the planner | **Tracking**: sticks vs gyro with the 3D quad |
+| ![Creature tab](docs/img/creature.png) | |
+| **Creature**: your quad's nearest mythical flier | |
 
 ![The first pages of the PDF report](docs/img/report.png)
 **PDF report**: the first pages of the [sample report](docs/sample-report.pdf) made from the demo log.

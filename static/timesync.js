@@ -202,3 +202,21 @@ function playTick(t, now) {
     S._tsLoading = true; renderTS().finally(() => S._tsLoading = false);
   }
 }
+
+// ---- drag anywhere on a time chart (also in the gaps between the stacked plots) to scroll: the playhead moves opposite to the drag, so the data follows the mouse.
+// Zoomed, the view is centred on the playhead and scrolls with it; on the whole-log view the playhead itself is scrubbed (a pan of the full range has nowhere to go).
+// Plotly's own pan is bypassed for these charts (its drag layer only covers the plot areas, and on the whole-log view it fought the clamped view).
+{ let drag = null;
+  $("main").addEventListener("mousedown", e => {
+    const gd = $("main"); if (e.button !== 0 || !gd._time || !gd._time.length || !gd._fullLayout || typeof PB === "undefined" || !PB.d) return;
+    const t = gd._time.find(a => a.dim === "x"); if (!t || e.target.closest(".legend,.modebar,.rangeslider")) return;
+    const ax = gd._fullLayout[t.axis]; if (!ax || !ax._length) return;
+    e.stopPropagation(); e.preventDefault();
+    drag = { x: e.clientX, t0: PB.t, pps: ax._length / Math.max(1e-6, ax.range[1] - ax.range[0]), was: PB.playing, moved: false };
+    PB.playing = false; document.body.classList.add("grabbing");
+  }, true);
+  document.addEventListener("mousemove", e => { if (!drag) return; const dx = e.clientX - drag.x; if (Math.abs(dx) > 2) drag.moved = true;
+    if (drag.moved) { TSY.lastLive = performance.now(); seek(drag.t0 - dx / drag.pps); } });
+  document.addEventListener("mouseup", () => { if (!drag) return; const d = drag; drag = null; document.body.classList.remove("grabbing"); if (d.was) PB.playing = true; if (typeof syncPlayBtn === "function") syncPlayBtn(); });
+  $("main").addEventListener("dblclick", e => { const gd = $("main"); if (gd._time && gd._time.length && gd._time.some(a => a.dim === "x") && !e.target.closest(".legend,.modebar")) { e.preventDefault(); e.stopPropagation(); syncView(null, {}); } }, true);
+}

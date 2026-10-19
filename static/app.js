@@ -14,6 +14,8 @@ const S = { file: null, sub: 1, meta: null, range: null, tab: "summary", nnper: 
   nper: store.get("nper", 256), fr: null, gamma: store.get("gamma", 1),
   res: { on: true, prom: 6, persist: 40, mask: 4, fmax: 500, ...store.get("res2", {}) }, nfr: null, _spec: {}, _res: {},
   step: { axes: [true, true, true], min_sp: 20, max_sp: 2000, thr_min: 0, thr_max: 100, win_s: 2, curves: false } };
+// which way is better: appended to every metric so a number is never shown without its direction
+const DIR = { hi: `<span class="dir hi" title="higher is better">↑</span>`, lo: `<span class="dir lo" title="lower is better">↓</span>` };
 const LV = { good: "✓ GOOD", info: "ℹ INFO", warning: "⚠ WARNING", serious: "✖ SERIOUS" };
 const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const findingsHTML = (list, head = "") => { if (list && list.length) S._flist.push(...list); return _fHTML(list, head); };
@@ -683,13 +685,13 @@ async function renderStep() {
   fitMain(440);
   await Plotly.react("main", tr, L, CFG);
 
-  const mt = (k, lbl, v, u = "") => `<dt data-tip="${k}">${lbl}</dt><dd>${v ?? "–"}${v != null ? u : ""}</dd>`;
+  const mt = (k, lbl, v, u = "", dir = "") => `<dt data-tip="${k}">${lbl}${dir ? " " + dir : ""}</dt><dd>${v ?? "–"}${v != null ? u : ""}</dd>`;
   const vlv = { Good: "good", OK: "warning", "Needs work": "serious", "Low confidence": "info" };
   const cards = sel.filter(i => d[i] && d[i].metrics).map(i => { const r = d[i], m = r.metrics;
     return `<div class="vd lv-${vlv[r.verdict]}"><div class="hd"><span><span class="sw" style="background:${axc(i)}"></span>${AX[i]}</span>
       <span class="badge lv-${vlv[r.verdict]}">${{ Good: "✓", OK: "⚠", "Needs work": "✖", "Low confidence": "ℹ" }[r.verdict]} ${r.verdict}</span></div>
-      <dl>${mt("overshoot", "Overshoot", m.overshoot_pct, "%")}${mt("rise", "Rise", m.rise_ms, " ms")}${mt("latency", "Latency", m.latency_ms, " ms")}${mt("settle", "Settle", m.settle_ms, " ms")}
-      ${mt("steady", "Steady", m.steady)}${mt("ringing", "Ringing", m.ringing)}${mt("n", "Windows", r.n)}</dl></div>`; }).join("");
+      <dl>${mt("overshoot", "Overshoot", m.overshoot_pct, "%", DIR.lo)}${mt("rise", "Rise", m.rise_ms, " ms", DIR.lo)}${mt("latency", "Latency", m.latency_ms, " ms", DIR.lo)}${mt("settle", "Settle", m.settle_ms, " ms", DIR.lo)}
+      ${mt("steady", "Steady", m.steady)}${mt("ringing", "Ringing", m.ringing, "", DIR.lo)}${mt("n", "Windows", r.n)}</dl></div>`; }).join("");
   const mx = Math.max(0, ...sel.flatMap(i => main[i].seg_stick || []));
   const none = sel.filter(i => !(d[i] && d[i].metrics)).map(i => `<div class="vd lv-info"><div class="hd">${AX[i]}<span class="badge lv-info">ℹ no data</span></div><span class="hint">Only ${d[i] ? d[i].n : 0} windows match (need 3). The fastest stick input in this range is ${mx.toFixed(0)} °/s, so widen the stick or throttle range.</span></div>`).join("");
   $("findings").innerHTML = pidHTML(d.pid) + `<div class="fh">Tune verdict (filtered gyro)</div><div class="verdicts">${cards}${none}</div>` +
@@ -1077,6 +1079,38 @@ function drawPwTrace(cv, t0, t1, t, e) {
 }
 
 // ---------- SUMMARY: one-page tuning report ----------
+// the filter-latency card: how much delay each stage of the filter chain adds, per axis, on the P/I path (gyro filters) and the D path (gyro + D-term filters),
+// against the reference setup, and what is left of the phase margin. Filled in once the delay model is ready (it is learned from the flight, so it takes a moment).
+async function fillLatency(stats) {
+  const card = $("latCard"); if (!card) return;
+  let D; try { D = await api("delay", { ref: S.dlyRef || "bf" }); } catch (e) { D = null; }
+  if (S.tab !== "summary" || !$("latCard")) return;
+  const axes = D && D.axes ? Object.keys(D.axes) : [];
+  if (!axes.length) { card.innerHTML = body + `<div class="hint">not enough data to model the loop</div>`; return; }
+  const COL = { gyro_lpf1: "--s1", gyro_lpf2: "--s2", gyro_notch: "--s3", rpm: "--s4", dyn_notch: "--s5", dterm_lpf1: "--roll", dterm_lpf2: "--pitch", dterm_notch: "--yaw", yaw_lpf: "--muted" };
+  const keys = []; axes.forEach(a => D.axes[a].rows.forEach(r => { if (!keys.includes(r.key)) keys.push(r.key); }));
+  const cats = [], typ = [];
+  axes.forEach(a => { const A = D.axes[a], nm = a[0].toUpperCase() + a.slice(1); cats.push(`${nm} D`, `${nm} P/I`); typ.push(A.d_typ, A.p_typ); });
+  const traces = keys.map(k => ({ type: "bar", orientation: "h", y: cats, name: SHORT[k] || k, marker: { color: css(COL[k] || "--muted") }, hovertemplate: `${SHORT[k] || k}: %{x:.2f} ms<extra></extra>`,
+    x: axes.flatMap(a => { const A = D.axes[a], r = A.rows.find(r => r.key === k); return [r && r.chain !== "gyro" || r && r.chain === "gyro" ? (r ? r.ms : 0) : 0, r && r.chain === "gyro" ? r.ms : 0]; }) }));
+  // D path = gyro stages + D-term stages; P/I path = gyro stages only: the D-term stages are zero on the P/I bars
+  traces.forEach((tr, k) => { const key = keys[k]; tr.x = axes.flatMap(a => { const r = D.axes[a].rows.find(r => r.key === key); return [r ? r.ms : 0, r && r.chain === "gyro" ? r.ms : 0]; }); });
+  traces.push({ type: "scatter", mode: "markers", y: cats, x: typ, name: D.ref_label, marker: { symbol: "line-ns", size: 18, line: { width: 2.5, color: css("--ink") }, color: css("--ink") }, hovertemplate: "reference: %{x:.2f} ms<extra></extra>" });
+  const pm = axes.map(a => { const A = D.axes[a], m = A.margins && A.margins.now; return { a, pm: m ? m.pm : null, ms: A.d_ms, ref: A.margins && A.margins.typical ? A.margins.typical.pm : null }; });
+  const lvl = pm.reduce((w, x) => { const l = x.pm == null ? "info" : x.pm >= 45 ? "good" : x.pm >= 30 ? "warning" : "serious"; return LVORD[l] < LVORD[w] ? l : w; }, "good");
+  const f = (D.findings || []).slice().sort((a, b) => LVORD[a.level] - LVORD[b.level]).slice(0, 2);
+  card.className = card.className.replace(/lv-\w+/, "") + " lv-" + lvl;
+  card.innerHTML = `<div class="dhead"><h3 data-tip="dly_tab"><a data-go="delay">Filter latency →</a></h3><span class="badge lv-${lvl}">${LV[lvl].split(" ")[0]} ${{ good: "Good", info: "Info", warning: "Check", serious: "Fix" }[lvl]}</span></div>` +
+    `<div id="dLat" class="mini lat"></div>
+     <div class="kv"><span>phase margin left (45° or more is healthy) ${DIR.hi}</span><b>${pm.map(x => `${x.a[0].toUpperCase()} ${x.pm == null ? "–" : x.pm.toFixed(0) + "°"}`).join(" · ")}</b></div>
+     <div class="kv"><span>delay on the D path ${DIR.lo}</span><b>${pm.map(x => `${x.a[0].toUpperCase()} ${x.ms.toFixed(1)} ms`).join(" · ")}</b></div>
+     ${f.length ? `<ul class="mflist">${f.map(x => `<li class="lv-${x.level}"><span class="lvl">${LV[x.level].split(" ")[0]}</span> ${esc(x.title)}</li>`).join("")}</ul>` : ""}`;
+  const L = base({ margin: { l: 58, r: 8, t: 6, b: 72 }, showlegend: true, barmode: "stack", hovermode: "closest", legend: { orientation: "h", y: -0.34, yanchor: "top", font: { size: 9 } } }); delete L._ax;
+  L.xaxis.tickfont = L.yaxis.tickfont = { size: 9 }; L.xaxis.title = { text: "delay at the loop crossover (ms), lower is better", font: { size: 9 }, standoff: 0 }; L.yaxis.autorange = "reversed";
+  Plotly.react("dLat", traces, L, { staticPlot: false, displayModeBar: false, responsive: true });
+  card.querySelectorAll("[data-go]").forEach(a => a.onclick = () => document.querySelector(`#tabs [data-tab="${a.dataset.go}"]`).click());
+}
+
 async function renderSummary() {
   $("controls").innerHTML = `<div class="row2"><h3 data-tip="tab_summary">Tuning summary</h3><span class="hint">${S.range ? "selected part of the flight" : "whole flight"} · for ${S.profile ? S.profile.used.inch + "″ " + S.profile.used.blades + "-blade" : ""} props · click a card title to open its tab</span><span class="tspacer"></span><button class="btn sm" id="sumPdf" data-tip="report_pdf">⬇ PDF report</button></div>`;
   $("sumPdf").onclick = () => makeReport();
@@ -1100,13 +1134,16 @@ async function renderSummary() {
   if (!S.prop && e.needs_confirm) pri.unshift({ level: "warning", title: "Confirm your prop size", tldr: "The analysis scales with it; the estimate isn't certain.", tab: "summary", self: true });
   const TABN = { noise: "Noise", step: "Step response", health: "Motor health", summary: "Profile", pid: "PID terms", motors: "Motors", propwash: "Propwash" };
   const badge = l => `<span class="badge lv-${l}">${LV[l].split(" ")[0]} ${{ good: "Good", info: "Info", warning: "Check", serious: "Fix" }[l]}</span>`;
-  const card = (id, title, tab, l, body, tip, cls = "") => `<section class="dcard ${cls} ${l ? "lv-" + l : ""}" ${id ? `id="${id}"` : ""}><div class="dhead"><h3 ${tip ? `data-tip="${tip}"` : ""}>${tab ? `<a data-go="${tab}">${title} →</a>` : title}</h3>${l ? badge(l) : ""}</div>${body}</section>`;
+  // cards show their visual and main findings; the rest (tables, settings, details) folds away behind a Details button (state remembered per card)
+  const openSt = store.get("sumOpen", {});
+  const card = (id, title, tab, l, body, tip, cls = "", more = "", openNow = false) => { const key = title.replace(/&amp;/g, "&"), open = openSt[key] ?? openNow;
+    return `<section class="dcard ${cls} ${l ? "lv-" + l : ""} ${open ? "open" : ""}" ${id ? `id="${id}"` : ""} data-key="${esc(key)}"><div class="dhead"><h3 ${tip ? `data-tip="${tip}"` : ""}>${tab ? `<a data-go="${tab}">${title} →</a>` : title}</h3>${l ? badge(l) : ""}${more ? `<button class="dtog" aria-expanded="${open}" title="Show or hide the details of this card"><span>Details</span><i>▾</i></button>` : ""}</div>${body}${more ? `<div class="dmore">${more}</div>` : ""}</section>`; };
   const flist = (list, n = 3) => { const l = (list || []).slice().sort((a, b) => LVORD[a.level] - LVORD[b.level]).slice(0, n);
     return l.length ? `<ul class="mflist">${l.map(f => `<li class="lv-${f.level}"><span class="lvl">${LV[f.level].split(" ")[0]}</span> ${esc(f.title)}</li>`).join("")}</ul>` : ""; };
   const conf = S.prop ? "good" : e.confidence === "high" ? "good" : e.confidence === "medium" ? "info" : "warning";
   const profile = `<div class="propbig">${u.inch}″ <small>× ${u.blades}-blade</small></div>
-    <div class="hint">${S.prop ? "set by you" : `estimated from flight data · ${e.confidence} confidence${e.range ? ` · range ${e.range[0]}–${e.range[1]}″` : ""}`}</div>
-    <div class="propedit"><label class="ctl">Prop size <input id="pIn" type="number" min="1" max="15" step="0.5" value="${u.inch}">″</label>
+    <div class="hint">${S.prop ? "set by you" : `estimated from flight data · ${e.confidence} confidence${e.range ? ` · range ${e.range[0]}–${e.range[1]}″` : ""}`}</div>`;
+  const profileMore = `<div class="propedit"><label class="ctl">Prop size <input id="pIn" type="number" min="1" max="15" step="0.5" value="${u.inch}">″</label>
       <span class="seg" id="pBl">${[2, 3, 4].map(b => `<button data-v="${b}" class="${b === u.blades ? "on" : ""}">${b}-blade</button>`).join("")}</span>
       <button class="btn sm" id="pUse">${S.prop ? "Update" : "Confirm"}</button>${S.prop ? `<button class="btn sm ghost" id="pReset">Use estimate</button>` : ""}</div>
     <details ${S.prop ? "" : "open"}><summary class="hint">How it was estimated</summary><ul class="ev">${(e.evidence || []).map(x => `<li>${esc(x)}</li>`).join("")}</ul></details>
@@ -1116,8 +1153,8 @@ async function renderSummary() {
     const m = r.metrics, ok = !r.reliability || r.reliability.ok, cl = ok ? "" : ` class="hint" title="not reliable: ${esc((r.reliability.why || []).join("; "))}"`;
     return `<tr${cl}><td><span class="sw" style="background:${axc(i)}"></span>${AX[i]}</td><td>${m.overshoot_pct}%${ok ? "" : "?"}</td><td>${m.rise_ms} ms</td><td>${m.steady}</td><td>${badge(vd[r.verdict])}</td></tr>`; }).join("");
   // filter effectiveness: measured noise removal per stage (raw vs filtered gyro), noise left, delay
-  const meter = (label, tip, val, frac, l, txt) => `<div class="meter lv-${l}"><span data-tip="${tip}">${label}</span><span class="mb"><i style="width:${Math.max(3, Math.min(100, frac * 100)).toFixed(0)}%"></i></span><b>${txt}</b></div>`;
-  let fe = "";
+  const meter = (label, tip, val, frac, l, txt, dir = "") => `<div class="meter lv-${l}"><span data-tip="${tip}">${label}${dir ? " " + dir : ""}</span><span class="mb"><i style="width:${Math.max(3, Math.min(100, frac * 100)).toFixed(0)}%"></i></span><b>${txt}</b></div>`;
+  let fe = "", feMore = "";
   if (nz.f) {
     const f = nz.f, nyq = stats.log_rate_hz / 2, M = nz.metrics || {};
     const pw_ = (db, lo, hi) => f.reduce((s, v, i) => v >= lo && v < hi ? s + 10 ** (db[i] / 10) : s, 0);
@@ -1128,43 +1165,48 @@ async function renderSummary() {
     const dl = nz.delay || {}, lvDel = dl.gyro_ms < sp.gyro_delay_light ? "good" : dl.gyro_ms < sp.gyro_delay_heavy ? "info" : "warning";
     const lvDD = dl.dterm_ms < sp.dterm_delay_light ? "good" : dl.dterm_ms < sp.dterm_delay_heavy ? "info" : "warning";
     fe = `<div class="hint">Measured on this flight: how much each stage removes (raw → filtered gyro, worst of roll/pitch), what is left, and what it costs in delay. Longer bar = better.</div>
-      ${meter("Fast noise removed (>100 Hz)", "fe_hf", hf, hf / 40, lvHf, `−${hf.toFixed(0)} dB`)}
-      ${meter("RPM notches on motor lines", "fe_rpm", rpm, (rpm || 0) / 30, lvRpm, rpm == null ? "n/a" : `−${rpm.toFixed(0)} dB`)}
-      ${meter("Dyn notch at frame resonances", "fe_dyn", dyn, (dyn || 0) / 30, dyn == null ? "good" : dyn >= 12 ? "good" : "warning", dyn == null ? "none to remove" : `−${dyn.toFixed(0)} dB`)}
-      ${meter("Mid band removed (50–100 Hz)", "fe_mid", mid, mid / 20, "info", `−${mid.toFixed(1)} dB`)}
-      ${meter("Noise reaching the motors (>80 Hz)", "fe_left", g, g == null ? 0 : 1 - Math.min(1, g / 3), lvG, g == null ? "–" : `${g}% RMS`)}
-      ${meter("D output above 100 Hz", "fe_d", dr, dr == null ? 0 : 1 - Math.min(1, dr), lvD, dr == null ? "–" : `${Math.round(dr * 100)}%`)}
-      ${meter("Gyro filter delay", "delay", dl.gyro_ms, 1 - Math.min(1, dl.gyro_ms / (2 * sp.gyro_delay_heavy)), lvDel, `${dl.gyro_ms} ms`)}
-      ${meter("D-term filter delay", "delay", dl.dterm_ms, 1 - Math.min(1, dl.dterm_ms / (2 * sp.dterm_delay_heavy)), lvDD, `${dl.dterm_ms} ms`)}`;
+      ${meter("Fast noise removed (>100 Hz)", "fe_hf", hf, hf / 40, lvHf, `−${hf.toFixed(0)} dB`, DIR.hi)}
+      ${meter("RPM notches on motor lines", "fe_rpm", rpm, (rpm || 0) / 30, lvRpm, rpm == null ? "n/a" : `−${rpm.toFixed(0)} dB`, DIR.hi)}
+      ${meter("Dyn notch at frame resonances", "fe_dyn", dyn, (dyn || 0) / 30, dyn == null ? "good" : dyn >= 12 ? "good" : "warning", dyn == null ? "none to remove" : `−${dyn.toFixed(0)} dB`, DIR.hi)}
+      ${meter("Noise reaching the motors (>80 Hz)", "fe_left", g, g == null ? 0 : 1 - Math.min(1, g / 3), lvG, g == null ? "–" : `${g}% RMS`, DIR.lo)}`;
+    feMore = `${meter("Mid band removed (50–100 Hz)", "fe_mid", mid, mid / 20, "info", `−${mid.toFixed(1)} dB`)}
+      ${meter("D output above 100 Hz", "fe_d", dr, dr == null ? 0 : 1 - Math.min(1, dr), lvD, dr == null ? "–" : `${Math.round(dr * 100)}%`, DIR.lo)}
+      ${meter("Gyro filter delay", "delay", dl.gyro_ms, 1 - Math.min(1, dl.gyro_ms / (2 * sp.gyro_delay_heavy)), lvDel, `${dl.gyro_ms} ms`, DIR.lo)}
+      ${meter("D-term filter delay", "delay", dl.dterm_ms, 1 - Math.min(1, dl.dterm_ms / (2 * sp.dterm_delay_heavy)), lvDD, `${dl.dterm_ms} ms`, DIR.lo)}`;
     lv.filters = worst([lvHf, lvRpm, lvG, lvD, lvDel, lvDD].map(level => ({ level })));
   }
   const pwEv = pw.events || [], pwMed = pwEv.length ? pwEv.map(x => x.ratio).sort((a, b) => a - b)[pwEv.length >> 1] : null;
   const lag = pw.axes ? [0, 1, 2].map(i => pw.axes[String(i)].lag_ms) : [];
   const hist = stats.thr_hist_s || [];
+  const priLi = f => `<li class="lv-${f.level}"><span class="lvl">${LV[f.level]}</span> <b>${esc(f.title)}</b> <span class="hint">${esc(f.tldr)}</span> <a data-go="${f.tab}" class="golink">${TABN[f.tab]} →</a></li>`;
+  const priOpen = openSt["Top priorities"] ?? false;
   $("dash").innerHTML = `
-    <section class="dcard wide pri lv-${pri.length ? worst(pri) : "good"}"><div class="dhead"><h3 data-tip="priorities">Top priorities</h3>${badge(pri.length ? worst(pri) : "good")}</div>
-      ${pri.length ? `<ol class="prilist">${pri.slice(0, 7).map(f => `<li class="lv-${f.level}"><span class="lvl">${LV[f.level]}</span> <b>${esc(f.title)}</b> <span class="hint">${esc(f.tldr)}</span> <a data-go="${f.tab}" class="golink">${TABN[f.tab]} →</a></li>`).join("")}</ol>`
+    <section class="dcard wide pri lv-${pri.length ? worst(pri) : "good"} ${priOpen ? "open" : ""}" data-key="Top priorities"><div class="dhead"><h3 data-tip="priorities">Top priorities</h3>${badge(pri.length ? worst(pri) : "good")}${pri.length > 3 ? `<button class="dtog" aria-expanded="${priOpen}" title="Show or hide the details of this card"><span>${pri.length - 3} more</span><i>▾</i></button>` : ""}</div>
+      ${pri.length ? `<ol class="prilist">${pri.slice(0, 3).map(priLi).join("")}</ol>${pri.length > 3 ? `<div class="dmore"><ol class="prilist" start="4">${pri.slice(3, 7).map(priLi).join("")}</ol></div>` : ""}`
                    : `<div class="hint">Nothing needs attention: no warnings in noise, tune, PID terms, motors or propwash.</div>`}</section>
-    ${card("profileCard", "Quad profile", null, conf, profile, "prop_chip")}
-    ${card("", "Tune (step response)", "step", lv.step, `<div id="dStep" class="mini"></div><table class="cmp"><tr><th></th><th data-tip="overshoot">overshoot</th><th data-tip="rise">rise</th><th data-tip="steady">steady</th><th></th></tr>${stepTbl}</table>
-      <div class="hint">rise faster than ~${sp.rise_ok_ms} ms is normal for ${u.inch}″ props${st.pid ? " · suggested PIDs on the Step response tab" : ""}</div>`, "tab_step")}
+    ${card("profileCard", "Quad profile", null, conf, profile, "prop_chip", "", profileMore)}
+    ${card("", "Tune (step response)", "step", lv.step, `<div id="dStep" class="mini"></div>${flist(stepF, 2)}`, "tab_step", "", `<table class="cmp"><tr><th></th><th data-tip="overshoot">overshoot ${DIR.lo}</th><th data-tip="rise">rise ${DIR.lo}</th><th data-tip="steady">steady</th><th></th></tr>${stepTbl}</table>
+      <div class="hint">rise faster than ~${sp.rise_ok_ms} ms is normal for ${u.inch}″ props${st.pid ? " · suggested PIDs on the Step response tab" : ""}</div>`)}
     ${card("", "Noise, filters &amp; frame resonances", "noise", lv.noise, `<div id="dNoise" class="mini"></div>
-      <div class="kv"><span data-tip="delay">filter delay</span><b>gyro ${nz.delay ? nz.delay.gyro_ms : "–"} ms · D-term ${nz.delay ? nz.delay.dterm_ms : "–"} ms</b></div>
-      <div class="kv"><span data-tip="res_on">frame resonances (red dashes)</span><b>${res.length ? res.length + " found" : `none up to ${resFmax()} Hz`}</b></div>
-      ${res.length ? `<ul class="reslist">${res.slice(0, 4).map(r => `<li><b style="color:var(--serious)">${r.id}</b> ${r.f.toFixed(0)} Hz <span class="hint">+${r.prom_db} dB · ${r.axes.map(a => AX[a].toLowerCase()).join("/")} · ${r.thr[0]}–${r.thr[1]}% thr · filters −${r.filtered_att_db ?? "?"} dB ${r.in_dyn ? "" : "· outside dyn notch!"}</span></li>`).join("")}</ul>` : ""}`, "tab_noise")}
-    ${card("", "Filter effectiveness", "noise", lv.filters, fe || `<div class="hint">not available</div>`, "filter_eff")}
+      <div class="kv"><span data-tip="res_on">frame resonances (red dashes)</span><b>${res.length ? res.length + " found" : `none up to ${resFmax()} Hz`} ${DIR.lo}</b></div>`, "tab_noise", "",
+      `<div class="kv"><span data-tip="delay">filter delay</span><b>gyro ${nz.delay ? nz.delay.gyro_ms : "–"} ms · D-term ${nz.delay ? nz.delay.dterm_ms : "–"} ms ${DIR.lo}</b></div>
+      ${res.length ? `<ul class="reslist">${res.slice(0, 4).map(r => `<li><b style="color:var(--serious)">${r.id}</b> ${r.f.toFixed(0)} Hz <span class="hint">+${r.prom_db} dB ${DIR.lo} · ${r.axes.map(a => AX[a].toLowerCase()).join("/")} · ${r.thr[0]}–${r.thr[1]}% thr · filters −${r.filtered_att_db ?? "?"} dB ${DIR.hi} ${r.in_dyn ? "" : "· outside dyn notch!"}</span></li>`).join("")}</ul>` : ""}`)}
+    ${card("", "Filter effectiveness", "noise", lv.filters, fe || `<div class="hint">not available</div>`, "filter_eff", "", feMore)}
+    ${card("latCard", "Filter latency", "delay", null, `<div class="hint">Loading the delay model…</div>`, "dly_tab", "", "")}
     ${card("", "Propwash &amp; latency", "propwash", lv.propwash, pw.error ? `<div class="hint">${esc(pw.error)}</div>` : `
-      <div class="kv"><span data-tip="tab_propwash">wobble after throttle chops</span><b>${pwMed != null ? pwMed.toFixed(1) + "× calm (" + pwEv.length + " chops)" : "no chops found"}</b></div>
-      <div class="kv"><span data-tip="latency">stick → motion delay</span><b>${lag.map((v, i) => v != null ? `${AX[i][0]} ${v} ms` : "").filter(Boolean).join(" · ")}</b></div>${flist(pw.findings, 2)}`, "tab_propwash")}
-    ${card("", "PID terms", "pid", lv.pid, pt.error ? `<div class="hint">${esc(pt.error)}</div>` : `<table class="cmp"><tr><th></th><th>P</th><th>I</th><th>D</th><th>FF</th><th data-tip="i_bias">I holds</th></tr>
+      <div class="kv"><span data-tip="tab_propwash">wobble after throttle chops</span><b>${pwMed != null ? pwMed.toFixed(1) + "× calm (" + pwEv.length + " chops)" : "no chops found"} ${DIR.lo}</b></div>
+      ${flist(pw.findings, 2)}`, "tab_propwash", "", pw.error ? "" : `<div class="kv"><span data-tip="latency">stick → motion delay</span><b>${lag.map((v, i) => v != null ? `${AX[i][0]} ${v} ms` : "").filter(Boolean).join(" · ")} ${DIR.lo}</b></div>`)}
+    ${card("", "PID terms", "pid", lv.pid, pt.error ? `<div class="hint">${esc(pt.error)}</div>` : flist(pt.findings.filter(f => f.level !== "info" || !f.title.startsWith("How hard")), 3) || `<div class="hint">no findings</div>`, "tab_pid", "", pt.error ? "" : `<table class="cmp"><tr><th></th><th>P</th><th>I</th><th>D</th><th>FF</th><th data-tip="i_bias">I holds ${DIR.lo}</th></tr>
       ${[0, 1, 2].map(i => { const a = pt.axes[String(i)], r = a.rms; return `<tr><td><span class="sw" style="background:${axc(i)}"></span>${AX[i]}</td><td>${r.P}</td><td>${r.I}</td><td>${r.D}</td><td>${r.FF}</td><td class="${Math.abs(a.i_bias) > 15 ? "high" : ""}">${a.i_bias > 0 ? "+" : ""}${a.i_bias}</td></tr>`; }).join("")}</table>
-      <div class="hint">RMS of each term in flight</div>${flist(pt.findings.filter(f => f.level !== "info" || !f.title.startsWith("How hard")), 3)}`, "tab_pid")}
-    ${card("", "Motors &amp; props", "health", mo.error ? null : worst([...(mo.findings || []), ...(mt.findings || [])]), mo.error ? `<div class="hint">${esc(mo.error)}</div>` : `<div class="qmini">${quadMap(mo)}</div>
-      ${mt.error ? "" : `<div class="kv"><span>hover output</span><b>${mt.hover_motor ?? "–"}%</b></div><div class="kv"><span data-tip="motor_sat">at 100% / at minimum</span><b>${mt.sat_pct}% / ${mt.floor_pct}%</b></div>`}
-      ${flist([...(mo.findings || []), ...(mt.findings || [])], 4)}`, "tab_health")}
-    ${card("", "Flight", null, null, `<div id="dThr" class="mini sm"></div><div class="kv"><span>duration</span><b>${stats.duration_s} s</b></div><div class="kv"><span>max rotation</span><b>${stats.max_rate_dps} °/s</b></div><div class="kv"><span data-tip="motor_sat">motors maxed out</span><b>${stats["motor_saturation_%"]}%</b></div>`)}`;
+      <div class="hint">RMS of each term in flight</div>`)}
+    ${card("", "Motors &amp; props", "health", mo.error ? null : worst([...(mo.findings || []), ...(mt.findings || [])]), mo.error ? `<div class="hint">${esc(mo.error)}</div>` : `<div class="qmini">${quadMap(mo)}</div>${flist([...(mo.findings || []), ...(mt.findings || [])], 4)}`, "tab_health", "",
+      mo.error || mt.error ? "" : `<div class="kv"><span>hover output</span><b>${mt.hover_motor ?? "–"}% ${DIR.lo}</b></div><div class="kv"><span data-tip="motor_sat">at 100% / at minimum</span><b>${mt.sat_pct}% / ${mt.floor_pct}% ${DIR.lo}</b></div>`)}
+    ${card("", "Flight", null, null, `<div id="dThr" class="mini sm"></div>`, null, "", `<div class="kv"><span>duration</span><b>${stats.duration_s} s</b></div><div class="kv"><span>max rotation</span><b>${stats.max_rate_dps} °/s</b></div><div class="kv"><span data-tip="motor_sat">motors maxed out</span><b>${stats["motor_saturation_%"]}% ${DIR.lo}</b></div>`)}`;
+  $("dash").querySelectorAll(".dtog").forEach(b => b.onclick = () => { const c = b.closest(".dcard"), o = !c.classList.contains("open"); c.classList.toggle("open", o); b.setAttribute("aria-expanded", o);
+    const s = store.get("sumOpen", {}); s[c.dataset.key] = o; store.set("sumOpen", s); setTimeout(() => ["dStep", "dNoise", "dThr", "dLat"].forEach(id => $(id) && $(id).data && Plotly.Plots.resize($(id))), 30); });
+  fillLatency(stats);
   // bindings
-  $("dash").querySelectorAll("[data-go]").forEach(a => a.onclick = () => { const t = a.dataset.go; if (t === "summary") return $("profileCard").scrollIntoView({ behavior: "smooth", block: "center" }); document.querySelector(`#tabs [data-tab="${t}"]`).click(); });
+  $("dash").querySelectorAll("[data-go]").forEach(a => a.onclick = () => { const t = a.dataset.go; if (t === "summary") { const pc = $("profileCard"); pc.classList.add("open"); pc.querySelector(".dtog") && pc.querySelector(".dtog").setAttribute("aria-expanded", true); return pc.scrollIntoView({ behavior: "smooth", block: "center" }); } document.querySelector(`#tabs [data-tab="${t}"]`).click(); });
   let bl = u.blades;
   $("pBl").onclick = ev => { const v = ev.target.dataset.v; if (!v) return; bl = +v; [...$("pBl").children].forEach(b => b.classList.toggle("on", b.dataset.v === v)); };
   $("pUse").onclick = () => setProp({ inch: +$("pIn").value, blades: bl });
@@ -1192,7 +1234,7 @@ function setupPlayer() {
   if (typeof PB === "undefined" || !S.meta) return;
   const cfg = PLAYER_TABS[S.tab] || {};
   PB.hooks = {};
-  const noTime = ["summary", "plan", "compare", "delay"].includes(S.tab);   // pages without a time axis: no timeline
+  const noTime = ["summary", "plan", "compare", "delay", "creature"].includes(S.tab);   // pages without a time axis: no timeline
   $("dock").hidden = noTime;
   if (noTime) { PB.playing = false; unmountViewer(); document.querySelector(".maincard").classList.remove("split"); return; }
   mountPlayer();
@@ -1224,7 +1266,7 @@ function healthLive(d, t) {
   $("hq-cap").textContent = `t ${t.toFixed(1)} s · live`;
 }
 
-const RENDER = { delay: () => renderDelay(), compare: () => renderCompare(), plan: () => renderPlan(), pidsim: () => renderPidSim(), propwash: renderPropwash, summary: renderSummary, tracking: renderTS, pid: renderTS, motors: renderTS, noise: renderNoise, spectro: renderSpectro, step: renderStep, health: renderHealth };
+const RENDER = { delay: () => renderDelay(), compare: () => renderCompare(), plan: () => renderPlan(), pidsim: () => renderPidSim(), propwash: renderPropwash, summary: renderSummary, tracking: renderTS, pid: renderTS, motors: renderTS, noise: renderNoise, spectro: renderSpectro, step: renderStep, health: renderHealth, creature: () => renderCreature() };
 const render = () => {
   if (!S.meta) return;
   const dash = S.tab === "summary";
@@ -1238,7 +1280,7 @@ const render = () => {
 };
 const TAB_BUSY = { delay: "Analysing the filter delay (learns this quad's dynamics the first time, ~15 s)", compare: "Comparing the two flights (all analyses, both logs)", plan: "Building the tune plan (all analyses)", summary: "Building the summary (all analyses)", tracking: "Loading flight traces", pid: "Analysing the PID terms", motors: "Analysing motor output",
   noise: "Analysing noise and filters", spectro: "Computing spectrograms", step: "Computing step responses", propwash: "Finding throttle chops",
-  pidsim: "Preparing the PID simulator", health: "Checking motors and props" };
+  creature: "Finding your quad's creature", pidsim: "Preparing the PID simulator", health: "Checking motors and props" };
 const LVORD = { serious: 0, warning: 1, info: 2, good: 3 };
 const SIDE3 = ["step", "pid", "motors", "propwash", "pidsim"];   // chart 2/3 left, findings 1/3 right
 function fitSide() { if (document.querySelector(".maincard.side3")) $("findings").style.maxHeight = $("main").offsetHeight + "px"; }
@@ -1293,7 +1335,7 @@ function renderSide(m) {
     return rows.length ? `<dt class="gh">${g}</dt>` + rows.map(n => `<dt${GLOSSARY[n] ? ` data-tip="${n}"` : ""}>${n}</dt><dd>${esc(fmt(n, k[n]))}</dd>`).join("") : ""; }).join("");
   const T = [["duration_s", "Duration", s.duration_s, "s"], ["log_rate_hz", "Log rate", s.log_rate_hz, "Hz"], ["avg_throttle", "Avg throttle", s["avg_throttle_%"], "%"],
              ["max_rate", "Max rate", s.max_rate_dps, "°/s"], ["motor_sat", "Motor sat.", s["motor_saturation_%"], "%"], ["frames", "Frames", (s.frames / 1000).toFixed(0), "k"]];
-  $("sumline").innerHTML = T.filter(t => t[2] != null).map(([t, a, v, u]) => `<span data-tip="${t}">${a} <b>${v}</b>${u}</span>`).join("");
+  $("sumline").innerHTML = T.filter(t => t[2] != null).map(([t, a, v, u]) => `<span data-tip="${t}">${a}${t === "motor_sat" ? " " + DIR.lo : ""} <b>${v}</b>${u}</span>`).join("");
 }
 
 // ---------- collapsible side panel ----------

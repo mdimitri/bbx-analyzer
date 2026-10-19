@@ -3,6 +3,19 @@
 Every release lists what changed for pilots first, then fixes. Screenshots, the banner and `docs/sample-report.pdf` are
 regenerated from the app for every release (`python tools/release.py all`).
 
+## 2.5 · 2026-10-19
+
+**New**
+- **Creature tab.** Scores the flight on eight axes, matches it to the nearest of 129 mythical creatures and shows it in 3D (rotatable, wind particles, wingtip trails, radar and stats).
+- **Summary: filter-latency card and collapsible cards.** Cards open with the visual and main findings; expand for details.
+- **Better/worse arrows** (▲/▼) on every metric in the app and in the PDF report.
+- **Splash: black-and-white shaded wireframe** with textured windows, roofs and glass, analytic road markings, true scale (quad against buildings), cars on their lanes, walking people and cyclists.
+- **Tracking: drag anywhere** in the plot area (including between traces) to scroll.
+
+**Fixed**
+- Scrolling the tracking traces when unzoomed.
+- Object shapes, positions and orientations in the toy world (wheels, doors, windmills, lane directions); PDF tile text truncation.
+
 ## 2.4 · 2026-10-13
 
 **New**

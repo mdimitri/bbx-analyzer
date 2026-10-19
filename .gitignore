@@ -1,0 +1,15 @@
+# created by the launchers
+.venv/
+.tools/
+BBX Analyzer.app/
+BBX Analyzer.desktop
+BBX Analyzer.lnk
+.write_test
+# caches
+logs/*.npz
+logs/*.model.json
+logs/*.sim.json
+__pycache__/
+
+# release builds
+dist/

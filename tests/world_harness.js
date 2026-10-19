@@ -4,7 +4,12 @@ const dir = path.join(__dirname, "..", "static");
 const src = fs.readFileSync(path.join(dir, "world.js"), "utf8") + "\n" + fs.readFileSync(path.join(dir, "demo.js"), "utf8") + "\nreturn {makeDemo, makeWorld, WORLD_KINDS};";
 const L = new Function("addEventListener", "store", "highpass", "$", src)(() => {}, { get: (k, d) => d, set() {} }, x => x, () => null);
 const w1 = L.makeWorld(), w2 = L.makeWorld();
-const used = new Set(w1.insts.map(i => i.ki)), cnt = {}; w1.insts.forEach(i => cnt[i.ki] = (cnt[i.ki] || 0) + 1);
+const kis = [...w1.insts.map(i => i.ki), ...w1.agents.filter(a => a.ki >= 0).map(a => a.ki)];   // placed objects and the vehicles that drive around
+const used = new Set(kis), cnt = {}; kis.forEach(k => cnt[k] = (cnt[k] || 0) + 1);
+// agents: every pose finite, cars on a road, walkers off it, speeds believable
+const ag = { n: w1.agents.length, cars: 0, carsOnRoad: 0, walkers: 0, walkersOffRoad: 0, bikes: 0, bad: 0 }, o = {};
+for (const a of w1.agents) for (let t = 0; t < 200; t += 3.7) { w1.agentPose(a, t, o); if (![o.x, o.y, o.z, o.yaw].every(Number.isFinite)) ag.bad++;
+  if (a.type === "car") { ag.cars++; if (w1.roadAt(o.x, o.y)) ag.carsOnRoad++; } else if (a.type === "walker") { ag.walkers++; if (!w1.roadAt(o.x, o.y)) ag.walkersOffRoad++; } else ag.bikes++; }
 const names = new Set(L.WORLD_KINDS.map(k => k.name));
 const rms = a => Math.sqrt(a.reduce((s, v) => s + v * v, 0) / a.length);
 const flights = [1, 2, 3, 4].map(s => { const d = L.makeDemo(s, 60, w1), c = d.ch; let sp = 0; for (let i = 1; i < d.n; i++) sp += Math.hypot(d.pos[0][i] - d.pos[0][i - 1], d.pos[1][i] - d.pos[1][i - 1], d.pos[2][i] - d.pos[2][i - 1]);
@@ -18,5 +23,5 @@ for (let k = 8; k <= 10; k++) { const b = L.makeDemo(k, 40, w1, a.cont), i = a.n
   chain.gap = Math.max(chain.gap, Math.hypot(b.pos[0][1249] - a.pos[0][a.n - 1], b.pos[1][1249] - a.pos[1][a.n - 1], b.pos[2][1249] - a.pos[2][a.n - 1]), Math.hypot(b.pos[0][1250] - a.pos[0][a.n - 1], b.pos[1][1250] - a.pos[1][a.n - 1], b.pos[2][1250] - a.pos[2][a.n - 1]) - 0.5);
   for (let j = 0; j < 1250; j += 50) chain.hist = Math.max(chain.hist, Math.abs(b.ch["m%[0]"][j] - a.ch["m%[0]"][i + j]), Math.abs(b.pos[2][j] - a.pos[2][i + j]));
   chain.hits += b.hits; a = b; }
-console.log(JSON.stringify({ chain, kinds: L.WORLD_KINDS.length, unique: names.size, used: used.size, minCount: Math.min(...Object.values(cnt)),
+console.log(JSON.stringify({ ag, chain, kinds: L.WORLD_KINDS.length, unique: names.size, used: used.size, minCount: Math.min(...Object.values(cnt)),
   same: JSON.stringify(w1.insts.slice(0, 50)) === JSON.stringify(w2.insts.slice(0, 50)) && w1.insts.length === w2.insts.length, flights }));

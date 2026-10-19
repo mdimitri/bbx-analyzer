@@ -75,7 +75,7 @@ async function renderCompare() {
   const fmt = v => v == null ? "–" : Math.abs(v) >= 100 ? Math.round(v) : +(+v).toFixed(2);
   const delta = r => r.a == null || r.b == null ? "" : r.key === "res_open" ? `${r.b - r.a >= 0 ? "+" : ""}${r.b - r.a}` : r.a ? `${r.b >= r.a ? "+" : ""}${Math.round((r.b - r.a) / Math.abs(r.a) * 100)}%` : "";
   const rows = d.rows.map(r => { const [lv, w] = VB[r.verdict] || ["info", "–"];
-    return `<tr class="cmprow" data-go="${r.tab}"><td>${esc(r.label)}</td><td>${fmt(r.a)} <small>${esc(r.unit)}</small></td><td><b>${fmt(r.b)}</b> <small>${esc(r.unit)}</small></td><td class="hint">${delta(r)}</td><td>${r.verdict ? `<span class="badge lv-${lv}">${w}</span>` : ""}</td></tr>`; }).join("");
+    return `<tr class="cmprow" data-go="${r.tab}"><td>${esc(r.label)}${r.dir > 0 ? " " + DIR.hi : r.dir < 0 ? " " + DIR.lo : ""}</td><td>${fmt(r.a)} <small>${esc(r.unit)}</small></td><td><b>${fmt(r.b)}</b> <small>${esc(r.unit)}</small></td><td class="hint">${delta(r)}</td><td>${r.verdict ? `<span class="badge lv-${lv}">${w}</span>` : ""}</td></tr>`; }).join("");
   const ch = d.changed.length ? `<table class="cmp cmpset"><tr><th>setting</th><th>before</th><th>after</th></tr>${d.changed.map(x => `<tr><td><code>${esc(x.key)}</code></td><td>${esc(x.a)}</td><td><b>${esc(x.b)}</b></td></tr>`).join("")}</table>`
     : `<div class="hint">No tuning setting differs between the two logs' headers.</div>`;
   const ideas = d.ideas.map(i => `<div class="pitem lv-${i.level}"><span class="pdot" style="background:${LVC(i.level)}"></span><div class="pbody"><div class="ptitle">${esc(i.title)}</div><div class="pwhy">${esc(i.text)}</div></div></div>`).join("");

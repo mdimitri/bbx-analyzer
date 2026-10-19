@@ -145,6 +145,7 @@ async def _shots(port):
         el = await pg.query_selector("#hpwr")
         if el:
             await el.scroll_into_view_if_needed(); await pg.wait_for_timeout(400); await el.screenshot(path=str(IMG / "battery.png")); print("  ✓ battery.png")
+        await tab("creature"); await pg.wait_for_timeout(2500); await shot("creature.png"); print("  ✓ creature.png")
         # filter delay with the hover card on the stage that costs the most
         await tab("delay")
         await hover_point("""() => { const gd = document.getElementById('main'), bars = gd.data.map((t, k) => [t, k]).filter(([t]) => t.type === 'bar');
