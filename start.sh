@@ -130,7 +130,7 @@ if [ ! -e .venv/.shortcut ]; then
   <key>CFBundleExecutable</key><string>launcher</string>
   <key>CFBundleIconFile</key><string>bbx</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>2.6.2</string>
+  <key>CFBundleShortVersionString</key><string>2.7.0</string>
   <key>LSMinimumSystemVersion</key><string>10.13</string>
 </dict></plist>
 PLIST

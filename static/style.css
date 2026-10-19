@@ -810,3 +810,41 @@ select#file { max-width: 230px; } .bar { gap: 6px; } .bar .btn { padding: 4px 8p
 .crt-why2 { color: var(--muted); font-size: 11.5px; }
 
 .crt-side .crt-top{grid-template-columns:1fr}.crt-side .crt-card.on{background:color-mix(in srgb,hsl(var(--h) 55% 55%) 14%,var(--panel))}
+
+/* ---- 2.7 focus layer: what matters is bigger, brighter and accented; the rest steps back ---- */
+:root { --raise: #202020; --card-ring: rgba(255,255,255,.06); --accent-soft: color-mix(in srgb, var(--accent) 16%, transparent); }
+:root[data-theme="light"] { --raise: #ffffff; --card-ring: rgba(0,0,0,.05); }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) { --raise: #ffffff; --card-ring: rgba(0,0,0,.05); } }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
+/* tabs: the active one is a filled, accented pill; the rest are quiet */
+.tabs button { color: var(--ink2); }
+.tabs button.on, .tabs button.gon { background: var(--accent-soft); color: var(--ink); font-weight: 700; box-shadow: inset 0 -3px 0 var(--accent); }
+/* cards: raised off the page, headings readable, a level-coloured bar on top instead of a loud full border */
+.dcard { background: var(--raise); border: 1px solid var(--card-ring); border-top: 3px solid var(--lvl, var(--axis)); box-shadow: 0 1px 0 var(--card-ring), 0 8px 24px -16px rgba(0,0,0,.6); padding: 12px 14px; gap: 8px; }
+.dcard .dhead h3, .dcard > h3 { font-size: 13px; letter-spacing: .05em; color: var(--ink); }
+.dcard .dhead h3 a, .dcard .dhead a { text-decoration: none; color: var(--ink); }
+.dcard .dhead h3 a:hover { color: var(--accent); }
+.dcard.pri { border-top-width: 4px; padding: 14px 16px; background: color-mix(in srgb, var(--lvl, var(--axis)) 9%, var(--raise)); }
+.dcard.pri li, .dcard.pri .prow, .dcard.pri > div { font-size: 14.5px; }
+.dcard.pri b, .dcard.pri strong { font-weight: 700; }
+.badge { font-size: 12.5px; padding: 3px 10px; background: color-mix(in srgb, var(--lvl, var(--axis)) 14%, transparent); }
+/* the big number of a card (e.g. prop size) and metric values pop; units and hints recede */
+.dcard .big, .dcard .num, .tile .v, .tile b { font-size: 1.9em; font-weight: 800; letter-spacing: -.01em; }
+.hint, .dcard small { color: var(--muted); }
+/* the header: findings badge and craft button are the two things to notice */
+#findingsBtn, .findings-pill { font-weight: 700; }
+/* buttons: one clear primary, calmer ghosts */
+.btn { border-radius: 8px; } .btn.primary, button.primary { background: var(--accent); color: #fff; border-color: var(--accent); font-weight: 700; }
+.btn.ghost { background: transparent; }
+/* section titles of a tab: stronger, with room */
+.tbar h3 { font-size: 15px; letter-spacing: .04em; color: var(--ink); }
+.tbar .hint { font-size: 12.5px; }
+/* the left sidebar steps back so the content gets the eye */
+#side, .side { background: color-mix(in srgb, var(--page) 80%, #000); }
+/* avatar: the selected animal and verdict are the focus */
+.crt-big { font-size: 26px; letter-spacing: -.01em; }
+.crt-stage { box-shadow: 0 0 0 1px var(--card-ring), 0 18px 40px -24px rgba(0,0,0,.7); }
+.crt-card.on { box-shadow: inset 0 0 0 2px hsl(var(--h) 55% 55%); font-weight: 700; }
+.crt-side { padding: 12px 14px; background: var(--raise); border: 1px solid var(--card-ring); border-radius: 12px; }
+.crt-side .fh { font-size: 12px; letter-spacing: .08em; color: var(--ink); }
+@media (max-width: 1100px) { .dcard.pri li, .dcard.pri > div { font-size: 13.5px; } }

@@ -1,7 +1,7 @@
-// Avatar tab: tooltip one-liners. Pure fun, not a measurement.
+// Avatar tab: tooltip one-liners. Pure fun, not a measurement. Nothing here names the creature (the card already does).
 // Quad voice (CR_DRONE): 8 axes x 30 levels, mechanical and droney, crQuip(axis, score 0..99).
-// Creature voice: 8 axes x 30 level templates filled with a per-creature lexicon (name, signature thing, habit, sound, nemesis),
-// so each of the 150 creatures gets its own 240 lines, crCreatureQuip(creature, axis, score 0..99).
+// Creature voice: 8 axes x 30 levels of dry one-liners (CR_TPL), some levels with a per-creature variant that uses what the creature is known for
+// ({act}: its habit, {foe}: who it bothers, {thing}: its signature item) from a 150-entry lexicon of folklore facts, crCreatureQuip(creature, axis, score 0..99).
 const CR_DRONE = {
  "spd": [
   "Groundspeed: negligible. Bird overtaking detected.",
@@ -262,270 +262,1019 @@ const CR_DRONE = {
 };
 const CR_TPL = {
  "spd": [
-  "{N} is outpaced by {foe}. Outpaced, too, by {foe}' grandparents.",
-  "{N} flies at the speed of {act}: not at all.",
-  "{N} arrives eventually, {sound} apologetically.",
-  "A brisk stroll, for {N}, if the wind helps.",
-  "{N} dawdles, mostly {act}.",
-  "{foe} could catch {N} with a sandwich and patience.",
-  "{N} is late, and {thing} is late too.",
-  "Cruising speed: \"I'll get there when {thing} gets there\".",
-  "{N} just about overtakes a pigeon, then {act}.",
-  "Quick, for something that spends its time {act}.",
-  "{N} is respectably fast. {foe} are impressed.",
-  "{N} gets places before closing time, {sound} proudly.",
-  "{N} keeps up with traffic. {thing} flaps along.",
-  "Fast enough that {foe} start running early.",
-  "{N} goes quick, {thing} streaming behind.",
-  "{N} {sound} past at a nicely alarming clip.",
-  "{N} leaves {foe} holding their hats.",
-  "Speeding ticket for {N}, delivered to {thing}.",
-  "{foe} watch {N} go by and forget what they were saying.",
-  "{N} is a blur, a {sound}, and a draught.",
-  "Quick! {N} took {thing} and left before {foe} blinked.",
-  "{N} stops {act} only to out-speed itself.",
-  "{N} is rumoured to outrun {foe} and its own echo.",
-  "By the time {foe} look up, {N} is a rumour.",
-  "{N} {sound}s and is gone. {foe} are filing complaints.",
-  "The sky parts for {N} and {thing} politely.",
-  "{N} has already arrived. {thing} is catching up.",
-  "{N} outruns its own {sound}. {foe} are shaken.",
-  "{N} breaks speed limits, {foe} and the idea of distance.",
-  "{N}: faster than {act}, faster than {foe}, faster than thought."
+  "Outrun by a thoughtful snail.",
+  "Speed limit: whatever the wind allows.",
+  "Arrives eventually, apologising.",
+  "Brisk, if you count a brisk shuffle.",
+  "Moves like it's carrying a full cup of tea.",
+  "A pensioner on a mobility scooter, with dignity.",
+  "Late for the bus, and the next one.",
+  "Cruising at \"I'll get there when I get there\".",
+  "Fast enough to overtake a cyclist, barely.",
+  "Speedy for a sofa.",
+  "Respectable. Mum would be proud.",
+  "Gets the shopping done before the shop closes.",
+  "Quick enough to beat the kettle.",
+  "Making the green light, most of the time.",
+  "Faster than your WiFi on a good day.",
+  "Commuter-train energy, minus the delays.",
+  "Leaves a polite little breeze.",
+  "Overtakes without even checking the mirror.",
+  "Speeding ticket: pending.",
+  "Fast enough that bugs file complaints.",
+  "Bird-scaring velocity unlocked.",
+  "Makes sports cars feel judged.",
+  "The horizon is getting nervous.",
+  "Blink and you've missed the vapour trail.",
+  "Physics is sending strongly worded letters.",
+  "Arrives before it left. Paperwork is a mess.",
+  "The bus is now a crime scene.",
+  "Gets a tan from friction.",
+  "Outruns its own shadow, and the shadow sulks.",
+  "Warp speed with a side of audacity."
  ],
  "pwr": [
-  "{N} pushes like a damp {thing}.",
-  "{N} could lift a feather, if {foe} helped.",
-  "{N} is strong in the \"{act}\" sense only.",
-  "{N} skipped leg day and so did {thing}.",
-  "{N} needs both claws to hold {thing}.",
-  "{N}'s muscles are decorative, like {thing}.",
-  "{N} can just about move {thing}, with effort.",
-  "{N} lifts its own weight, with a grunt and {thing}.",
-  "{N} gym card: unused, like {thing}.",
-  "A decent shove from {N}, enough for {foe}.",
-  "{N} pulls its weight and {thing} too.",
-  "{N} carries the load in one trip, {sound} proudly.",
-  "{N} is mildly scary to {foe}, mostly.",
-  "{N} would win a tug-of-war versus {foe}.",
-  "{N} opens jars for the whole flock, then goes back to {act}.",
-  "Solid thrust: {N} {sound}s at gravity and it listens.",
-  "{N} eats protein for breakfast, and {foe} for supper.",
-  "{N} lifts {thing} and calls it a warm-up.",
-  "{N} throws its weight around, mostly at {foe}.",
-  "{N} {sound}s; gravity blinks and gives way.",
-  "{N} bench-presses a boulder while {act}.",
-  "{N} has thrust to spare and {thing} to burn.",
-  "For {N}, its own weight is a rounding error. {foe} agree.",
-  "{N} flexes {thing}; {foe} faint.",
-  "{N} is the strong one at the gym of {foe}.",
-  "{N} could launch a barn. {thing} would help.",
-  "Gravity files a transfer request when {N} is {act}.",
-  "{N} could launch {thing} into orbit, then {sound}.",
-  "Power overwhelming: {N} {sound}s, {foe} reconsider.",
-  "{N} bends physics for fun, and {thing} for dessert."
+  "Pushes like a wet noodle.",
+  "Could lift a feather, with encouragement.",
+  "Strong as a motivational poster.",
+  "Skipped leg day, arm day and most days.",
+  "Needs both hands to hold a sandwich.",
+  "Muscles mostly decorative.",
+  "Can open a yoghurt, mostly.",
+  "Lifts its own weight, just about.",
+  "Gym membership: unused but paid.",
+  "A decent shove, nothing more.",
+  "Pulls its weight, and a bit more.",
+  "Carries the groceries in one trip. Proudly.",
+  "Mildly intimidating at a barbecue.",
+  "Could win a tug-of-war against a toddler.",
+  "Opens jars for the whole family.",
+  "Solid thrust, solid confidence.",
+  "Eats protein for breakfast, lunch and fear.",
+  "Lifts a sofa and calls it cardio.",
+  "Throws its weight around, politely.",
+  "Pushes back at gravity, and gravity blinks.",
+  "Bench-presses a small car on a whim.",
+  "Thrust to spare, and a spare of the spare.",
+  "Treats its own weight as a rounding error.",
+  "Flexes when nobody's looking.",
+  "Has a gym buddy called Hulk.",
+  "Rocket-science-adjacent shoulders.",
+  "Gravity has applied for a transfer.",
+  "Could launch a piano into orbit.",
+  "Power overwhelming. Ask nicely first.",
+  "Bends physics, mostly for fun."
  ],
  "agi": [
-  "{N} turns like a barge, {act} through treacle.",
-  "{N}'s steering is a suggestion, like {thing}.",
-  "{N} takes a roundabout in three days, {sound}ing.",
-  "{N} corners with the grace of {thing}.",
-  "{N} turns left by committing to a long right, {act}.",
-  "A U-turn for {N} needs {foe} to clear the road.",
-  "{N} pivots like a trolley with {thing}.",
-  "{N} dodges {foe}, eventually.",
-  "Slow-motion reflexes, heroic effort: {N} {sound}s.",
-  "{N} can turn, given warning and {thing}.",
-  "{N} handles like a sensible hatchback and {thing}.",
-  "{N} takes bends without {sound}ing.",
-  "{N} is nimble enough to dodge {foe} at a crowded pub.",
-  "{N} weaves past {foe} politely.",
-  "{N} turns on a coin, a big coin, with {thing}.",
-  "Quick pivot from {N}, quicker apology to {foe}.",
-  "{N} dodges {foe} thrown at it, still {act}.",
-  "{N} spins to win, then {sound}s.",
-  "{N} doesn't turn so much as reconsider direction, {act}.",
-  "{N} flicks around like a startled cat and {thing}.",
-  "{N} corners with a hint of showing off to {foe}.",
-  "{N} turns on a dime and keeps the change, and {thing}.",
-  "{N} spins as if late for another spin, {sound}ing.",
-  "{N} changes heading and mind simultaneously. {foe} are lost.",
-  "{N} slaloms around {foe} while {act}.",
-  "For {N}, gravity is optional and corners are decorative.",
-  "{N} turns on a dime, steals the dime, and {sound}s.",
-  "{N} pirouettes through a keyhole, {thing} in tow.",
-  "Orientation is a rumour that {N} started.",
-  "{N} redefines turning. {foe} are still spinning."
+  "Turns like a cruise ship in treacle.",
+  "Steering is more of a suggestion.",
+  "Takes a roundabout in three business days.",
+  "Corners with the grace of a fridge.",
+  "Turns left by committing to a long right.",
+  "A U-turn needs a risk assessment.",
+  "Pivots like a shopping trolley with a bad wheel.",
+  "Dodges, eventually.",
+  "Slow-motion reflexes, heroic effort.",
+  "Can turn, given a postcode and some warning.",
+  "Handles like a sensible hatchback.",
+  "Takes bends without screaming.",
+  "Nimble enough for a crowded pub.",
+  "Weaves through traffic, politely.",
+  "Turns on a coin, a big coin.",
+  "Quick pivot, quicker apology.",
+  "Dodges the thrown slipper.",
+  "Spins to win, and wins.",
+  "Doesn't turn so much as reconsider direction.",
+  "Flicks around like a startled cat.",
+  "Corners with a hint of showing off.",
+  "Can turn on a dime and keep the change.",
+  "Spins like it's late for another spin.",
+  "Changes mind and heading simultaneously.",
+  "Slaloms around its own shadow.",
+  "Corners like gravity is optional.",
+  "Turns on a dime, steals the dime, and is gone.",
+  "Pirouettes through a keyhole.",
+  "Orientation is a rumour.",
+  "Redefines \"turning\" as a quantum event."
  ],
  "nim": [
-  "{N} responds eventually, like {thing} on a landline.",
-  "{N} reacts at the speed of bureaucracy, {act}.",
-  "{N} thinks about moving. Sometimes it does.",
-  "{N} has a delay on the delay, and {sound}s about it.",
-  "Lag so long {N} makes tea while {act}.",
-  "Commands reach {N} by post, when {foe} remember.",
-  "{N} is sluggish but dignified, mostly {act}.",
-  "{N} wakes after the second coffee and {thing}.",
-  "{N} responds when it feels respected by {foe}.",
-  "{N} is reasonably prompt, {sound} included.",
-  "{N} answers the stick before the stick finishes.",
-  "{N} reacts like a well-rested goalkeeper, minus {foe}.",
-  "{N} is quick on the draw, slow on {thing}.",
-  "Snappy as a fresh baguette, {N} {sound}s.",
-  "{N} responds as if it read your mind, {act}.",
-  "{N} is twitchy in a helpful way. {foe} are jumpy.",
-  "Caffeinated {N}: {thing} twitching, {sound} imminent.",
-  "{N} reacts before the thought finishes loading.",
-  "{N}'s reflexes are sharper than {thing}.",
-  "{N} catches {foe} with chopsticks, mid-spin.",
-  "{N} responds in the gap between two heartbeats of {foe}.",
-  "Time slows down just to let {N} keep up.",
-  "{N} gets the message before it's sent, {sound}ing.",
-  "Cat-like reflexes: {N} {sound}s without the napping.",
-  "{N} reads the stick like a gossip column about {foe}.",
-  "{N} responds faster than regret, {thing} already moving.",
-  "Lag? {N} has never met her. {foe} confirm.",
-  "{N}'s reflexes make lightning look lazy. {foe} ask for ID.",
-  "{N} reacts to the future and sends {foe} a postcard.",
-  "{N} answers before you ask, mid-{act}."
+  "Responds eventually, like a landline.",
+  "Reacts at the speed of bureaucracy.",
+  "Thinks about moving. Sometimes it does.",
+  "A sloth with a delay on the delay.",
+  "Lag so long you can make tea.",
+  "Commands arrive by post.",
+  "Sluggish, but with a dignified pause.",
+  "Awake after the second coffee.",
+  "A hummingbird with a mortgage.",
+  "Responds when it feels respected.",
+  "Reasonably prompt, mostly sober.",
+  "Answers the stick before the stick finishes.",
+  "Reaction time of a well-rested goalkeeper.",
+  "Quick on the draw, slow on the holster.",
+  "Snappy as a fresh baguette.",
+  "Responds like it read your mind, on a good day.",
+  "Twitchy in a helpful way.",
+  "Caffeinated hummingbird.",
+  "Reacts before the thought finishes loading.",
+  "Reflexes sharper than a tax inspector.",
+  "Catches flies with chopsticks, mid-spin.",
+  "Responds in the gap between two heartbeats.",
+  "Time slows down just to keep up.",
+  "Gets the message before it's sent.",
+  "Cat-like reflexes, minus the napping.",
+  "Reads the stick like a gossip column.",
+  "Responds faster than regret.",
+  "Lag? Never met her.",
+  "Reflexes that make lightning look lazy.",
+  "Reacts to the future, politely."
  ],
  "end": [
-  "{N} needs a nap after take-off, preferably {act}.",
-  "{N} runs on fumes and {thing}.",
-  "{N}'s battery anxiety is chronic and {sound}y.",
-  "{N} runs out of puff before the introduction.",
-  "{N} lands to catch its breath, {act} next.",
-  "{N} is powered by one stressed AA and {thing}.",
-  "A sprinter with a pension plan: {N}.",
-  "{N} is gasping by minute three, {sound}ing.",
-  "Short bursts for {N}, long recoveries with {thing}.",
-  "{N} flies as if paying by the minute for {thing}.",
-  "{N} has decent stamina and mediocre snacks.",
-  "{N} lasts a whole podcast, then {sound}s.",
-  "{N} doesn't need a sandwich break. Yet.",
-  "Steady as a tortoise with a sponsor: {N}.",
-  "{N} outlasts your coffee and {foe}.",
-  "{N} cruises through a full playlist, {act}.",
-  "{N} laps the neighbourhood, {sound}ing for more.",
-  "{N} is efficient as an accountant counting {thing}.",
-  "{N} sips power like fine whisky, {act}.",
-  "{N} could do this all afternoon, {foe} included.",
-  "{N} improves with every kilometre, {thing} too.",
-  "A marathon runner with a smug smile: {N}.",
-  "{N} outlasts three batteries, a bad mood and {foe}.",
-  "Energy bills fear {N}. So does {thing}.",
-  "{N} hovers for hours without breaking a sweat, {act}.",
-  "{N} is powered by spite, clean aerodynamics and {thing}.",
-  "{N} ruins {foe}'s afternoon for hours.",
-  "{N}'s battery has filed for early retirement, {thing} in hand.",
-  "{N} defies thermodynamics, politely, {act}.",
-  "{N} flies until the heat death of the park."
+  "Needs a nap after take-off.",
+  "Runs on fumes and optimism.",
+  "Battery anxiety: chronic.",
+  "Runs out of puff before the introduction.",
+  "Lands to catch its breath. And again.",
+  "Powered by a single, stressed AA.",
+  "A sprinter with a pension plan.",
+  "Gasping by minute three.",
+  "Short bursts, long recoveries.",
+  "Flies like it's paying by the minute.",
+  "Decent stamina, mediocre snacks.",
+  "Can last a whole podcast.",
+  "Doesn't need to stop for a sandwich. Yet.",
+  "Steady, like a tortoise with a sponsor.",
+  "Will outlast your coffee.",
+  "Cruises through a full playlist.",
+  "Laps the neighbourhood and asks for more.",
+  "Efficient, like a Scottish accountant.",
+  "Sips power like fine whisky.",
+  "Could do this all afternoon.",
+  "Gets better with every kilometre.",
+  "Marathon runner with a smug smile.",
+  "Outlasts three batteries and a bad mood.",
+  "Energy companies fear it.",
+  "Hovers for hours without breaking a sweat.",
+  "Powered by spite and clean aerodynamics.",
+  "Ruins your afternoon for hours.",
+  "Its battery has filed for early retirement.",
+  "Defies thermodynamics, politely.",
+  "Flies until the heat death of the park."
  ],
  "clb": [
-  "Gravity wins every argument with {N}.",
-  "{N} rises like a sulking soufflé, {act}.",
-  "{N} takes the stairs, holding {thing}.",
-  "{N}'s climb rate: a gentle suggestion to {foe}.",
-  "{N} goes up mostly by accident, {sound}ing.",
-  "Elevator music, no elevator: {N} {act}.",
-  "A hill is a major life event for {N}.",
-  "{N} ascends like a heavy sigh and {thing}.",
-  "{N} makes it over the fence. Just. {foe} watch.",
-  "{N} climbs with a sensible backpack of {thing}.",
-  "{N} has decent lift and no dramatics, {act}.",
-  "{N} hops up a tree without a fuss and {sound}s.",
-  "{N} gains height like a keen hiker with {thing}.",
-  "{N} scales a rooftop on a good day, {foe} below.",
-  "Up {N} goes with a spring in {thing}.",
-  "{N} zooms up like it saw a bargain on {thing}.",
-  "{N} takes lifts personally and {sound}s.",
-  "{N} finds the ceiling and asks for more, {act}.",
-  "{N} climbs like it has beef with gravity and {foe}.",
-  "{N} rockets past the treeline, {sound}ing.",
-  "{N} eats vertical metres for breakfast and {thing} for lunch.",
-  "Elevator? No. {N} is a catapult.",
-  "{N} goes up like a shared secret among {foe}.",
-  "{N} leaves clouds feeling underdressed, {act}.",
-  "Altitude is a number and {N} is bored of it.",
-  "{N} goes vertical like a bad idea, {sound}ing.",
-  "{N} skips the stairs, the lift and the building.",
-  "For {N}, the launch pad is a state of mind and {thing}.",
-  "{N} reaches orbit as a courtesy to {foe}.",
-  "Gravity resigns quietly when {N} is {act}."
+  "Gravity wins every argument.",
+  "Rises like a sulking soufflé.",
+  "Takes the stairs. Slowly. Holding the rail.",
+  "Climb rate: gentle suggestion.",
+  "Goes up, mostly by accident.",
+  "Elevator music, no elevator.",
+  "A hill is a major life event.",
+  "Ascends like a heavy sigh.",
+  "Makes it over the fence. Just.",
+  "Climbs with a sensible backpack.",
+  "Decent lift, no dramatics.",
+  "Hops up a tree without a fuss.",
+  "Gains height like a keen hiker.",
+  "Scales a rooftop on a good day.",
+  "Up it goes, with a spring in its step.",
+  "Zooms up like it saw a bargain.",
+  "Takes lifts personally.",
+  "Finds the ceiling and asks for more.",
+  "Climbs like it has beef with gravity.",
+  "Rockets past the treeline.",
+  "Eats vertical metres for breakfast.",
+  "Elevator? No. Catapult.",
+  "Going up like a shared secret.",
+  "Leaves clouds feeling underdressed.",
+  "Altitude is just a number, and it's bored.",
+  "Vertical like a bad idea.",
+  "Skips the stairs, the lift and the building.",
+  "Launch pad is a state of mind.",
+  "Orbit, but as a courtesy.",
+  "Gravity resigns quietly."
  ],
  "std": [
-  "{N} is a shopping trolley in a gale, {act}.",
-  "{N} wobbles like jelly on a washing machine and {sound}s.",
-  "{N} flies like it's on a rollercoaster, by choice, with {thing}.",
-  "{N} hovers in a general vicinity. Optimistic.",
-  "{N} dances to a beat only {thing} hears.",
-  "{N} shakes like a nervous intern near {foe}.",
-  "{N} is steady if you squint and are generous.",
-  "{N} wiggles with confidence, {sound}ing.",
-  "{N} is slightly tipsy but charming, {act}.",
-  "{N} is a waiter with a full tray after midnight.",
-  "{N} is mostly level, occasionally spirited, {foe} notice.",
-  "{N} holds a line like a toddler holds a crayon.",
-  "{N} is steady enough for a lidded cup of tea.",
-  "{N} has a gentle sway like a hammock, {act}.",
-  "{N} is calm with a hint of mischief and {thing}.",
-  "{N}: steady as a Sunday afternoon and {sound}ing.",
-  "{N} is level-headed, unlike {foe}.",
-  "{N} is a waiter carrying soup, {thing} balanced.",
-  "{N} stays put when the wind misbehaves, {act}.",
-  "{N} doesn't flinch at throttle chops. {foe} flinch for it.",
-  "{N} handles gusts like a diplomat with {thing}.",
-  "{N} is rock-solid, but a flying rock.",
-  "{N}: soup carrier, grade A, {sound} intact.",
-  "{N} doesn't wobble, even when {foe} ask nicely.",
-  "{N} is nailed to the sky with invisible screws and {thing}.",
-  "{N} is a Buddhist monk carrying soup, {act}.",
-  "{N} is smooth as a spirit level's best day.",
-  "{N} is immovable and unbothered by {foe}.",
-  "The wind files a complaint against {N} and is ignored.",
-  "{N}'s stillness is so deep it has an echo of {sound}."
+  "A shopping trolley in a gale.",
+  "Wobbles like a jelly on a washing machine.",
+  "Flies like it's on a rollercoaster. By choice.",
+  "Hovers in a general vicinity. Optimistic.",
+  "Dances to a beat only it hears.",
+  "Shakes like a nervous intern.",
+  "Steady if you squint and are generous.",
+  "Wiggles with confidence.",
+  "Slightly tipsy, still charming.",
+  "A waiter with a full tray, after midnight.",
+  "Mostly level, occasionally spirited.",
+  "Holds a line like a toddler holds a crayon.",
+  "Steady enough for a cup of tea. Lidded.",
+  "Gentle sway, like a hammock.",
+  "Calm, with a tiny hint of mischief.",
+  "Steady as a Sunday afternoon.",
+  "Level-headed, unlike its owner.",
+  "Waiter carrying soup.",
+  "Stays put, even when the wind misbehaves.",
+  "Doesn't flinch at throttle chops.",
+  "Handles gusts like a diplomat.",
+  "Rock-solid, but a flying rock.",
+  "Soup carrier, grade A.",
+  "Doesn't wobble, even when asked nicely.",
+  "Nailed to the sky with invisible screws.",
+  "A Buddhist monk carrying soup.",
+  "Smooth as a spirit level's best day.",
+  "Immovable, and unbothered.",
+  "Wind files a complaint, gets ignored.",
+  "Stillness so deep it has an echo."
  ],
  "smo": [
-  "{N} is a shopping cart with a grudge against {thing}.",
-  "{N} buzzes like an angry hive, {sound}ing at {foe}.",
-  "{N} vibrates in ways physics did not approve, {act}.",
-  "{N} sounds like a coffee grinder with feelings.",
-  "{N} rattles the fillings out of passing {foe}.",
-  "{N}'s noise floor: all of it, plus {thing}.",
-  "{N} feels like a washing machine on spin and {sound}s.",
-  "{N} is jittery like a phone on silent in church.",
-  "{N} is gritty, like sand in {thing}.",
-  "A touch of sandpaper in {N}'s signal.",
-  "{N} is not smooth, not crunchy: chunky.",
-  "{N} is smooth-ish, with notes of gravel and {thing}.",
-  "A pleasant hum from {N}, mostly polite to {foe}.",
-  "{N} is clean enough to serve dinner on, {act}.",
-  "{N} is quiet. Suspiciously quiet. {foe} worry.",
-  "{N} is smoother than a politician's apology, {act}.",
-  "{N} glides like a well-oiled drawer of {thing}.",
-  "{N} is silky, with a small side of silk.",
-  "{N}: low noise, high self-respect, {sound} muted.",
-  "{N} is smooth like jazz at midnight, {act}.",
-  "{N} is butter on a warm knife and {thing}.",
-  "{N} is satin pyjamas in motion, {sound}ing softly.",
-  "{N} is glass-smooth, no fingerprints from {foe}.",
-  "{N}'s hover is so clean it feels illegal.",
-  "{N} is silent as a ninja's whisper, {act}.",
-  "{N} is smooth enough to confuse the spectrogram of {thing}.",
-  "{N} is butter on silk, {sound}ing like a rumour.",
-  "{N} is so smooth gravity slips off. {foe} slip too.",
-  "Noise? {N} never heard of it. {sound} not found.",
-  "{N} is frictionless. Even the air is jealous, {foe} too."
+  "A shopping cart with a grudge.",
+  "Buzzes like an angry hornet's nest.",
+  "Vibrates in ways physics did not approve.",
+  "Sounds like a coffee grinder with feelings.",
+  "Rattles the fillings out of passing clouds.",
+  "Noise floor: all of it.",
+  "Feels like a washing machine on spin.",
+  "Jittery, like a phone on silent in church.",
+  "Gritty. Like sand in a sandwich.",
+  "A touch of sandpaper in the signal.",
+  "Not smooth, not crunchy: chunky.",
+  "Smooth-ish, with notes of gravel.",
+  "Pleasant hum, mostly polite.",
+  "Clean enough to serve dinner on.",
+  "Quiet. Suspiciously quiet.",
+  "Smoother than a politician's apology.",
+  "Gliding like a well-oiled drawer.",
+  "Silky, with a small side of silk.",
+  "Low noise, high self-respect.",
+  "Smooth like a jazz saxophone at midnight.",
+  "Butter on a warm knife.",
+  "Satin pyjamas in motion.",
+  "Glass-smooth, no fingerprints.",
+  "A hover so clean it feels illegal.",
+  "Silent as a ninja's whisper.",
+  "Smooth enough to confuse the spectrogram.",
+  "Butter on silk.",
+  "So smooth gravity slips off.",
+  "Noise? Never heard of it.",
+  "Frictionless. Even the air is jealous."
  ]
 };
-const CR_LEX = Object.fromEntries("Western Dragon|its hoard|guarding gold|roars|knights\nWyvern|its barbed tail|sulking on a crag|hisses|shepherds\nDrake|its smoulder|showing off|snorts|pigeons\nSky Dragon (Long)|its pearl|coiling through clouds|rumbles|thunderclouds\nFrost Wyrm|its frost|freezing lakes|creaks|snowmen\nStorm Drake|its lightning|scolding the sky|crackles|umbrellas\nEmber Whelp|its tiny flames|toasting marshmallows|squeaks|candles\nElder Wyrm|its centuries|napping on mountains|rumbles|heroes\nShadow Dragon|its shadow|lurking in caves|whispers|torches\nCrystal Dragon|its facets|sparkling at nothing|chimes|jewellers\nMagma Drake|its lava|melting boots|bubbles|volcanologists\nSwamp Wyvern|its mud|wallowing|gurgles|frogs\nHydra|its extra heads|arguing with itself|bickers|heroes\nPhoenix|its ashes|rising again|trills|fire alarms\nThunderbird|its thunderclap|flapping up storms|booms|forecasters\nRoc|its elephant snack|carrying elephants|screeches|sailors\nSimurgh|its wisdom|teaching other birds|sings|philosophers\nFenghuang|its grace|strutting politely|sings|dull emperors\nFirebird|its glowing feather|being stolen from|chirps|feather thieves\nGaruda|its snake grudge|hunting serpents|bellows|snakes\nBennu|its sunrise|greeting the sun|calls|owls\nZiz|its wingspan|blotting out the sun|bellows|sunbathers\nAnzu|its stolen tablet|meddling with destiny|shrieks|gods\nStymphalian Bird|its bronze feathers|raining feathers|clangs|heroes\nCaladrius|its bedside manner|diagnosing the sick|coos|newsreaders\nAlicanto|its glowing wings|guiding miners|glows|gold diggers\nHuginn the Raven|its thoughts|gossiping with gods|croaks|secrets\nPegasus|its mane|trotting on clouds|whinnies|carts\nGriffin|its claws|guarding treasure|screeches|thieves\nHippogriff|its pride|demanding a bow|squawks|rude wizards\nChimera|its three opinions|three-way arguments|bleats|single-minded things\nManticore|its stinger|taking offence|growls|travellers\nSphinx|its riddle|asking riddles|purrs|tourists\nLamassu|its gateway|guarding doors|rumbles|trespassers\nPeryton|its antlers|casting the wrong shadow|bugles|hunters\nWinged Wolf|its pack|howling above clouds|howls|sheep\nSky Stag|its antlers|posing nobly|bells|hunters\nJersey Devil|its scream|haunting the Pine Barrens|screams|campers\nThunder Ox|its hooves|stomping on clouds|bellows|fences\nJackalope|its antlers|pretending to be a rabbit|squeaks|taxidermists\nPixie|its dust|sprinkling dust|giggles|bees\nSprite|its mischief|tripping travellers|titters|clocks\nFairy|its wand|granting small wishes|tinkles|teeth\nWill-o'-the-Wisp|its glow|leading folk astray|flickers|map readers\nSylph|its breeze|riding drafts|sighs|kites\nFaerie Dragon|its prank|setting up pranks|giggles|wizards\nImp|its pitchfork|causing minor chaos|cackles|clerks\nGossamer Elf|its cobweb cloak|drifting silently|hums|spiders\nDandelion Sprite|its fluff|drifting wherever|puffs|lawnmowers\nFirefly Fae|its lantern|blinking in code|blinks|moths\nSnowflake Pixie|its sparkle|melting at the thought|tinkles|sunbeams\nLeaf Sprite|its leaf|falling stylishly|rustles|autumn winds\nStardust Sprite|its stardust|twinkling|twinkles|astronomers\nTooth Fairy|its pliers|collecting molars|whispers|dentists\nKitsune|its nine tails|tricking travellers|yips|lesser foxes\nGiant Dragonfly|its four wings|hovering on a whim|clicks|mosquitoes\nHornet Knight|its sting|jousting at lunchtime|buzzes|picnics\nGlass Moth|its transparency|being see-through|flutters|lamps\nMothman|its red eyes|watching bridges|chitters|reporters\nLuna Moth Spirit|its moon glow|fluttering at moonlight|whirs|porch lights\nScarab Guardian|its shell|rolling the sun|clicks|tomb raiders\nWasp Queen|its throne|bossing the hive|buzzes|picnickers\nMantis Lord|its scythes|praying menacingly|clicks|dinner guests\nButterfly Oracle|its prophecy|predicting hurricanes|flutters|hurricanes\nFirefly Swarm Lord|its swarm|blinking in unison|blinks|night strollers\nBee Matron|its honey|fussing over the hive|hums|bears\nLocust King|its swarm|eating fields|drones|farmers\nCicada Seer|its seventeen years|screaming after naps|shrills|summer evenings\nWind Elemental|its gale|huffing and puffing|howls|hats\nStorm Spirit|its fury|sulking in clouds|crackles|picnics\nAir Djinn|its three wishes|reading wish fine print|whooshes|lamp owners\nBanshee|its wail|wailing at midnight|wails|light sleepers\nWraith|its chill|haunting corridors|whispers|candles\nPoltergeist|its crockery|throwing crockery|rattles|tableware\nZephyr|its breeze|caressing sails|sighs|candles\nCloud Sprite|its fluff|napping on cumulus|puffs|airliners\nLightning Sprite|its spark|zapping at random|zaps|tall trees\nAurora Wisp|its colours|draping the sky|hums|tourists\nIfrit|its smoke|scorching the neighbours|roars|lamp rubbers\nEmber Wisp|its glow|smouldering gently|crackles|damp logs\nFrost Wraith|its icy breath|chilling spines|rattles|hot drinks\nSpectral Eagle|its see-through wings|patrolling the afterlife|screeches|ghostly mice\nThunder Elemental|its rumble|drumming on clouds|booms|dogs\nMist Phantom|its vapour|lingering on moors|murmurs|shortcuts\nWinged Demon|its pitchfork|upselling souls|snarls|lost souls\nBalrog|its whip|shouting at bridges|roars|wizards\nFallen Angel|its halo|brooding dramatically|sighs|angels\nSeraph|its six wings|glowing smugly|sings|sinners\nCherub|its tiny bow|matchmaking|giggles|wedding planners\nValkyrie|its spear|choosing the slain|cries|slackers\nArchangel|its trumpet|announcing things|trumpets|apocalypses\nNightgaunt|its tickling|hunting without a face|whispers|dreamers\nHarpy|its talons|screeching at sailors|shrieks|sailors\nSiren Gull|its song|stealing chips|squawks|chip owners\nSkeletal Wyvern|its ribs|rattling bones|rattles|archaeologists\nRevenant Raven|its grudge|holding a grudge|croaks|the living\nLich Bat|its phylactery|hanging around|squeaks|adventurers\nHell Hawk|its brimstone|burning rubber|shrieks|small devils\nAngelic Scout|its clipboard|scouting heaven|hums|clouds\nKinnara|its melody|playing divine music|sings|bad singers\nStone Gargoyle|its gutter|glaring from rooftops|grinds|pigeons\nClockwork Owl|its mainspring|ticking wisely|ticks|nightingales\nBrass Dragonfly|its brass wings|polishing itself|whirs|mosquitoes\nSteam Wyvern|its boiler|venting steam|hisses|kettles\nIron Griffin|its rivets|clanking nobly|clangs|tin openers\nCrystal Glider|its prisms|scattering rainbows|chimes|chandeliers\nMechanical Hummingbird|its tiny gears|hovering over flowers|whirrs|real hummingbirds\nWindup Bat|its key|needing a wind-up|clicks|spiders\nGearwork Phoenix|its cogs|rebuilding from spare parts|whirs|rust patches\nRune Drone|its runes|compiling spells|beeps|bugs\nCloud Whale|its blubber|sailing sleepy skies|sings|airliners\nSky Manta|its wings|gliding gracefully|glides|sardines\nAether Jelly|its tendrils|floating philosophically|pulses|poets\nStorm Ray|its static|crackling along|crackles|lightning rods\nVoid Jellyfish|its void|drifting through nothing|pulses|stars\nStar Whale|its starlight|humming through constellations|sings|comets\nWind Serpent|its coils|slithering through gales|hisses|weather vanes\nQuetzalcoatl|its feathers|sulking as a god|hisses|conquistadors\nAmaru|its two heads|joining sky and earth|hisses|borders\nThunder Eel|its voltage|zapping everything|crackles|metal objects\nZeppelin Whale|its helium|floating pompously|rumbles|pins\nPaper Crane Spirit|its folds|folding politely|rustles|rain clouds\nKite Dragon|its string|tangling in trees|flutters|gusts\nLantern Jelly|its glow|lighting the way|pulses|dark corners\nSky Squid|its tentacles|multitasking|squelches|sky whales\nGiant Bat|its echolocation|squeaking at walls|screeches|moths\nOwl King|its crown|ruling by hoot|hoots|mice\nNight Moth|its dusk|fluttering at lamps|flutters|porch lights\nShadow Bat|its shadow|hanging in the dark|clicks|spotlights\nMidnight Owl|its night shift|working nights|hoots|mice\nOwl Sage|its wisdom|pondering|hoots|fools\nFlying Pig|its bacon dreams|defying proverbs|oinks|sceptics\nWinged Cow|its milk|mooing above clouds|moos|burger fans\nFlying Brick|its brickness|falling with intent|thuds|windows\nRubber Duck Squadron|its squeak|flying in formation|squeaks|bathtubs\nFlying Toaster|its crumbs|popping upward|pops|bread rolls\nPenguin Glider|its tuxedo|belly-flopping through air|honks|fish\nPet Rock With Wings|its rockiness|mostly sitting|sulks|physicists\nAnvil Falcon|its anvil|plummeting in cartoons|screeches|coyotes\nWild Turkey|its gobble|flapping in a fluster|gobbles|pilgrims\nDodo Airlines|its in-flight service|reassuring passengers|honks|fossils\nSleepy Sloth|its naps|hanging about|yawns|deadlines\nFlying Spaghetti Monster|its noodly appendages|blessing meatballs|slurps|colanders\nHot-Air Balloon|its basket|drifting with a view|whooshes|power lines\nFlying Carpet|its tassels|vacuuming the sky|whooshes|lamp rubbers\nWitch's Broom|its bristles|sweeping the clouds|whooshes|dust bunnies\nShopping Cart Rocket|its dodgy wheel|veering left|rattles|car park kerbs\nPaper Plane|its folds|gliding on hope|whistles|desk fans\nRubber Chicken|its squawk|flapping floppily|squeaks|punchlines\nBumblebee (Allegedly)|its aerodynamics|defying engineers|buzzes|physicists".split("\n").map(l => { const [n, thing, act, sound, foe] = l.split("|"); return [n, { thing, act, sound, foe }]; }));
-const crLvl = (L, v) => L[Math.max(0, Math.min(L.length - 1, Math.floor(Math.max(0, Math.min(99, v)) / 100 * L.length)))];
-const crQuip = (k, v) => { const L = CR_DRONE[k]; return L ? crLvl(L, v) : ""; };
-const crStem = v => v.replace(/ies$/, "y").replace(/(ch|sh|ss|x)es$/, "$1").replace(/s$/, "");
-const crIng = v => { const s = crStem(v); return /[^aeiou][aeiou][bdgmnprt]$/.test(s) && s.length <= 4 ? s + s.slice(-1) + "ing" : /[^aeiou]e$/.test(s) ? s.slice(0, -1) + "ing" : s + "ing"; };
-const crCreatureQuip = (c, k, v) => { const L = CR_TPL[k], x = CR_LEX[c.name] || { thing: "its wings", act: "flapping", sound: "squeaks", foe: "passers-by" };
-  if (!L) return "";
-  const out = crLvl(L, v).replace(/\{N\}/g, c.name).replace(/\{thing\}/g, x.thing).replace(/\{act\}/g, x.act).replace(/\{foe\}/g, x.foe)
-    .replace(/\{sound\}ing/g, crIng(x.sound)).replace(/\{sound\}y/g, crIng(x.sound)).replace(/\{sound\}s/g, x.sound).replace(/\{sound\}/g, crStem(x.sound));
-  return out.replace(/(^|[.!?:] )([a-z])/g, (m, a, b) => a + b.toUpperCase()); };
+const CR_VAR = {"spd": {"0": "Overtaken by {foe}. On foot.", "2": "Too busy {act} to hurry.", "3": "Even {thing} had time to get bored.", "5": "{foe} could catch it with a sandwich and patience.", "16": "{foe} notice it only after it has passed.", "19": "Fast enough that {foe} start running early.", "20": "{foe} have to hold on to their hats.", "26": "{foe} file complaints, retroactively.", "27": "Even {thing} had trouble keeping up."}, "pwr": {"9": "A decent shove, enough to bother {foe}.", "13": "Would beat {foe} in a tug-of-war. Probably.", "18": "Throws its weight around, mostly at {foe}.", "23": "{foe} flinch when it flexes.", "19": "Pushes back at gravity while {act}, and gravity blinks."}, "agi": {"13": "Weaves around {foe}, politely.", "25": "{foe} try to follow and end up dizzy.", "7": "Dodges {foe}, eventually.", "20": "Corners with a hint of showing off to {foe}."}, "nim": {"6": "Sluggish, but dignified, even while {act}.", "17": "{foe} blink, and it has already reacted.", "24": "Cat-like reflexes, even while {act}.", "12": "Reacts faster than {foe} can say \"look out\".", "3": "Reaction delay long enough to finish {act}."}, "end": {"19": "Could keep {act} all afternoon.", "26": "{foe} give up and go home first.", "12": "Doesn't need to stop {act} for a sandwich. Yet.", "22": "Outlasts three batteries, a bad mood and {foe}.", "7": "Gasping by minute three of {act}."}, "clb": {"4": "Goes up mostly by accident, usually while {act}.", "16": "Takes lifts personally, especially around {foe}.", "19": "Rockets past the treeline, {foe} left far below.", "23": "Leaves clouds feeling underdressed, and {foe} very small.", "13": "Scales a rooftop on a good day, to the alarm of {foe}."}, "std": {"4": "Dances to a beat only it hears, usually while {act}.", "16": "Level-headed, unlike most {foe}.", "18": "Stays put while {act}, even when the wind misbehaves.", "5": "Shakes like a nervous intern near {foe}.", "27": "Immovable, and unbothered by {foe}."}, "smo": {"9": "A touch of sandpaper in the signal, mostly while {act}.", "14": "Quiet. Suspiciously quiet. {foe} are worried.", "17": "Silky, even while {act}.", "22": "Glass-smooth, no fingerprints from {foe}.", "24": "Silent as a ninja, which {foe} never notice."}};
+const CR_LEX = {
+"Western Dragon": [
+"its hoard",
+"guarding gold",
+"knights"
+],
+"Wyvern": [
+"its barbed tail",
+"sulking on a crag",
+"shepherds"
+],
+"Drake": [
+"its smoulder",
+"showing off",
+"pigeons"
+],
+"Sky Dragon (Long)": [
+"its pearl",
+"coiling through clouds",
+"thunderclouds"
+],
+"Frost Wyrm": [
+"its frost",
+"freezing lakes",
+"snowmen"
+],
+"Storm Drake": [
+"its lightning",
+"scolding the sky",
+"umbrellas"
+],
+"Ember Whelp": [
+"its tiny flames",
+"toasting marshmallows",
+"candles"
+],
+"Elder Wyrm": [
+"its centuries",
+"napping on mountains",
+"heroes"
+],
+"Shadow Dragon": [
+"its shadow",
+"lurking in caves",
+"torches"
+],
+"Crystal Dragon": [
+"its facets",
+"sparkling at nothing",
+"jewellers"
+],
+"Magma Drake": [
+"its lava",
+"melting boots",
+"volcanologists"
+],
+"Swamp Wyvern": [
+"its mud",
+"wallowing",
+"frogs"
+],
+"Hydra": [
+"its extra heads",
+"arguing with itself",
+"heroes"
+],
+"Phoenix": [
+"its ashes",
+"rising again",
+"fire alarms"
+],
+"Thunderbird": [
+"its thunderclap",
+"flapping up storms",
+"forecasters"
+],
+"Roc": [
+"its elephant snack",
+"carrying elephants",
+"sailors"
+],
+"Simurgh": [
+"its wisdom",
+"teaching other birds",
+"philosophers"
+],
+"Fenghuang": [
+"its grace",
+"strutting politely",
+"dull emperors"
+],
+"Firebird": [
+"its glowing feather",
+"being stolen from",
+"feather thieves"
+],
+"Garuda": [
+"its snake grudge",
+"hunting serpents",
+"snakes"
+],
+"Bennu": [
+"its sunrise",
+"greeting the sun",
+"owls"
+],
+"Ziz": [
+"its wingspan",
+"blotting out the sun",
+"sunbathers"
+],
+"Anzu": [
+"its stolen tablet",
+"meddling with destiny",
+"gods"
+],
+"Stymphalian Bird": [
+"its bronze feathers",
+"raining feathers",
+"heroes"
+],
+"Caladrius": [
+"its bedside manner",
+"diagnosing the sick",
+"newsreaders"
+],
+"Alicanto": [
+"its glowing wings",
+"guiding miners",
+"gold diggers"
+],
+"Huginn the Raven": [
+"its thoughts",
+"gossiping with gods",
+"secrets"
+],
+"Pegasus": [
+"its mane",
+"trotting on clouds",
+"carts"
+],
+"Griffin": [
+"its claws",
+"guarding treasure",
+"thieves"
+],
+"Hippogriff": [
+"its pride",
+"demanding a bow",
+"rude wizards"
+],
+"Chimera": [
+"its three opinions",
+"three-way arguments",
+"single-minded things"
+],
+"Manticore": [
+"its stinger",
+"taking offence",
+"travellers"
+],
+"Sphinx": [
+"its riddle",
+"asking riddles",
+"tourists"
+],
+"Lamassu": [
+"its gateway",
+"guarding doors",
+"trespassers"
+],
+"Peryton": [
+"its antlers",
+"casting the wrong shadow",
+"hunters"
+],
+"Winged Wolf": [
+"its pack",
+"howling above clouds",
+"sheep"
+],
+"Sky Stag": [
+"its antlers",
+"posing nobly",
+"hunters"
+],
+"Jersey Devil": [
+"its scream",
+"haunting the Pine Barrens",
+"campers"
+],
+"Thunder Ox": [
+"its hooves",
+"stomping on clouds",
+"fences"
+],
+"Jackalope": [
+"its antlers",
+"pretending to be a rabbit",
+"taxidermists"
+],
+"Pixie": [
+"its dust",
+"sprinkling dust",
+"bees"
+],
+"Sprite": [
+"its mischief",
+"tripping travellers",
+"clocks"
+],
+"Fairy": [
+"its wand",
+"granting small wishes",
+"teeth"
+],
+"Will-o'-the-Wisp": [
+"its glow",
+"leading folk astray",
+"map readers"
+],
+"Sylph": [
+"its breeze",
+"riding drafts",
+"kites"
+],
+"Faerie Dragon": [
+"its prank",
+"setting up pranks",
+"wizards"
+],
+"Imp": [
+"its pitchfork",
+"causing minor chaos",
+"clerks"
+],
+"Gossamer Elf": [
+"its cobweb cloak",
+"drifting silently",
+"spiders"
+],
+"Dandelion Sprite": [
+"its fluff",
+"drifting wherever",
+"lawnmowers"
+],
+"Firefly Fae": [
+"its lantern",
+"blinking in code",
+"moths"
+],
+"Snowflake Pixie": [
+"its sparkle",
+"melting at the thought",
+"sunbeams"
+],
+"Leaf Sprite": [
+"its leaf",
+"falling stylishly",
+"autumn winds"
+],
+"Stardust Sprite": [
+"its stardust",
+"twinkling",
+"astronomers"
+],
+"Tooth Fairy": [
+"its pliers",
+"collecting molars",
+"dentists"
+],
+"Kitsune": [
+"its nine tails",
+"tricking travellers",
+"lesser foxes"
+],
+"Giant Dragonfly": [
+"its four wings",
+"hovering on a whim",
+"mosquitoes"
+],
+"Hornet Knight": [
+"its sting",
+"jousting at lunchtime",
+"picnics"
+],
+"Glass Moth": [
+"its transparency",
+"being see-through",
+"lamps"
+],
+"Mothman": [
+"its red eyes",
+"watching bridges",
+"reporters"
+],
+"Luna Moth Spirit": [
+"its moon glow",
+"fluttering at moonlight",
+"porch lights"
+],
+"Scarab Guardian": [
+"its shell",
+"rolling the sun",
+"tomb raiders"
+],
+"Wasp Queen": [
+"its throne",
+"bossing the hive",
+"picnickers"
+],
+"Mantis Lord": [
+"its scythes",
+"praying menacingly",
+"dinner guests"
+],
+"Butterfly Oracle": [
+"its prophecy",
+"predicting hurricanes",
+"hurricanes"
+],
+"Firefly Swarm Lord": [
+"its swarm",
+"blinking in unison",
+"night strollers"
+],
+"Bee Matron": [
+"its honey",
+"fussing over the hive",
+"bears"
+],
+"Locust King": [
+"its swarm",
+"eating fields",
+"farmers"
+],
+"Cicada Seer": [
+"its seventeen years",
+"screaming after naps",
+"summer evenings"
+],
+"Wind Elemental": [
+"its gale",
+"huffing and puffing",
+"hats"
+],
+"Storm Spirit": [
+"its fury",
+"sulking in clouds",
+"picnics"
+],
+"Air Djinn": [
+"its three wishes",
+"reading wish fine print",
+"lamp owners"
+],
+"Banshee": [
+"its wail",
+"wailing at midnight",
+"light sleepers"
+],
+"Wraith": [
+"its chill",
+"haunting corridors",
+"candles"
+],
+"Poltergeist": [
+"its crockery",
+"throwing crockery",
+"tableware"
+],
+"Zephyr": [
+"its breeze",
+"caressing sails",
+"candles"
+],
+"Cloud Sprite": [
+"its fluff",
+"napping on cumulus",
+"airliners"
+],
+"Lightning Sprite": [
+"its spark",
+"zapping at random",
+"tall trees"
+],
+"Aurora Wisp": [
+"its colours",
+"draping the sky",
+"tourists"
+],
+"Ifrit": [
+"its smoke",
+"scorching the neighbours",
+"lamp rubbers"
+],
+"Ember Wisp": [
+"its glow",
+"smouldering gently",
+"damp logs"
+],
+"Frost Wraith": [
+"its icy breath",
+"chilling spines",
+"hot drinks"
+],
+"Spectral Eagle": [
+"its see-through wings",
+"patrolling the afterlife",
+"ghostly mice"
+],
+"Thunder Elemental": [
+"its rumble",
+"drumming on clouds",
+"dogs"
+],
+"Mist Phantom": [
+"its vapour",
+"lingering on moors",
+"shortcuts"
+],
+"Winged Demon": [
+"its pitchfork",
+"upselling souls",
+"lost souls"
+],
+"Balrog": [
+"its whip",
+"shouting at bridges",
+"wizards"
+],
+"Fallen Angel": [
+"its halo",
+"brooding dramatically",
+"angels"
+],
+"Seraph": [
+"its six wings",
+"glowing smugly",
+"sinners"
+],
+"Cherub": [
+"its tiny bow",
+"matchmaking",
+"wedding planners"
+],
+"Valkyrie": [
+"its spear",
+"choosing the slain",
+"slackers"
+],
+"Archangel": [
+"its trumpet",
+"announcing things",
+"apocalypses"
+],
+"Nightgaunt": [
+"its tickling",
+"hunting without a face",
+"dreamers"
+],
+"Harpy": [
+"its talons",
+"screeching at sailors",
+"sailors"
+],
+"Siren Gull": [
+"its song",
+"stealing chips",
+"chip owners"
+],
+"Skeletal Wyvern": [
+"its ribs",
+"rattling bones",
+"archaeologists"
+],
+"Revenant Raven": [
+"its grudge",
+"holding a grudge",
+"the living"
+],
+"Lich Bat": [
+"its phylactery",
+"hanging around",
+"adventurers"
+],
+"Hell Hawk": [
+"its brimstone",
+"burning rubber",
+"small devils"
+],
+"Angelic Scout": [
+"its clipboard",
+"scouting heaven",
+"clouds"
+],
+"Kinnara": [
+"its melody",
+"playing divine music",
+"bad singers"
+],
+"Stone Gargoyle": [
+"its gutter",
+"glaring from rooftops",
+"pigeons"
+],
+"Clockwork Owl": [
+"its mainspring",
+"ticking wisely",
+"nightingales"
+],
+"Brass Dragonfly": [
+"its brass wings",
+"polishing itself",
+"mosquitoes"
+],
+"Steam Wyvern": [
+"its boiler",
+"venting steam",
+"kettles"
+],
+"Iron Griffin": [
+"its rivets",
+"clanking nobly",
+"tin openers"
+],
+"Crystal Glider": [
+"its prisms",
+"scattering rainbows",
+"chandeliers"
+],
+"Mechanical Hummingbird": [
+"its tiny gears",
+"hovering over flowers",
+"real hummingbirds"
+],
+"Windup Bat": [
+"its key",
+"needing a wind-up",
+"spiders"
+],
+"Gearwork Phoenix": [
+"its cogs",
+"rebuilding from spare parts",
+"rust patches"
+],
+"Rune Drone": [
+"its runes",
+"compiling spells",
+"bugs"
+],
+"Cloud Whale": [
+"its blubber",
+"sailing sleepy skies",
+"airliners"
+],
+"Sky Manta": [
+"its wings",
+"gliding gracefully",
+"sardines"
+],
+"Aether Jelly": [
+"its tendrils",
+"floating philosophically",
+"poets"
+],
+"Storm Ray": [
+"its static",
+"crackling along",
+"lightning rods"
+],
+"Void Jellyfish": [
+"its void",
+"drifting through nothing",
+"stars"
+],
+"Star Whale": [
+"its starlight",
+"humming through constellations",
+"comets"
+],
+"Wind Serpent": [
+"its coils",
+"slithering through gales",
+"weather vanes"
+],
+"Quetzalcoatl": [
+"its feathers",
+"sulking as a god",
+"conquistadors"
+],
+"Amaru": [
+"its two heads",
+"joining sky and earth",
+"borders"
+],
+"Thunder Eel": [
+"its voltage",
+"zapping everything",
+"metal objects"
+],
+"Zeppelin Whale": [
+"its helium",
+"floating pompously",
+"pins"
+],
+"Paper Crane Spirit": [
+"its folds",
+"folding politely",
+"rain clouds"
+],
+"Kite Dragon": [
+"its string",
+"tangling in trees",
+"gusts"
+],
+"Lantern Jelly": [
+"its glow",
+"lighting the way",
+"dark corners"
+],
+"Sky Squid": [
+"its tentacles",
+"multitasking",
+"sky whales"
+],
+"Giant Bat": [
+"its echolocation",
+"squeaking at walls",
+"moths"
+],
+"Owl King": [
+"its crown",
+"ruling by hoot",
+"mice"
+],
+"Night Moth": [
+"its dusk",
+"fluttering at lamps",
+"porch lights"
+],
+"Shadow Bat": [
+"its shadow",
+"hanging in the dark",
+"spotlights"
+],
+"Midnight Owl": [
+"its night shift",
+"working nights",
+"mice"
+],
+"Owl Sage": [
+"its wisdom",
+"pondering",
+"fools"
+],
+"Flying Pig": [
+"its bacon dreams",
+"defying proverbs",
+"sceptics"
+],
+"Winged Cow": [
+"its milk",
+"mooing above clouds",
+"burger fans"
+],
+"Flying Brick": [
+"its brickness",
+"falling with intent",
+"windows"
+],
+"Rubber Duck Squadron": [
+"its squeak",
+"flying in formation",
+"bathtubs"
+],
+"Flying Toaster": [
+"its crumbs",
+"popping upward",
+"bread rolls"
+],
+"Penguin Glider": [
+"its tuxedo",
+"belly-flopping through air",
+"fish"
+],
+"Pet Rock With Wings": [
+"its rockiness",
+"sitting",
+"physicists"
+],
+"Anvil Falcon": [
+"its anvil",
+"plummeting in cartoons",
+"coyotes"
+],
+"Wild Turkey": [
+"its gobble",
+"flapping in a fluster",
+"pilgrims"
+],
+"Dodo Airlines": [
+"its in-flight service",
+"reassuring passengers",
+"fossils"
+],
+"Sleepy Sloth": [
+"its naps",
+"hanging about",
+"deadlines"
+],
+"Flying Spaghetti Monster": [
+"its noodly appendages",
+"blessing meatballs",
+"colanders"
+],
+"Hot-Air Balloon": [
+"its basket",
+"drifting with a view",
+"power lines"
+],
+"Flying Carpet": [
+"its tassels",
+"vacuuming the sky",
+"lamp rubbers"
+],
+"Witch's Broom": [
+"its bristles",
+"sweeping the clouds",
+"dust bunnies"
+],
+"Shopping Cart Rocket": [
+"its dodgy wheel",
+"veering left",
+"car park kerbs"
+],
+"Paper Plane": [
+"its folds",
+"gliding on hope",
+"desk fans"
+],
+"Rubber Chicken": [
+"its squawk",
+"flapping floppily",
+"punchlines"
+],
+"Bumblebee (Allegedly)": [
+"its aerodynamics",
+"defying engineers",
+"physicists"
+]
+};
+const crLvl = (L, v) => Math.max(0, Math.min(L.length - 1, Math.floor(Math.max(0, Math.min(99, v)) / 100 * L.length)));
+const crQuip = (k, v) => { const L = CR_DRONE[k]; return L ? L[crLvl(L, v)] : ""; };
+const crCreatureQuip = (c, k, v) => { const L = CR_TPL[k]; if (!L) return "";
+  const i = crLvl(L, v), x = CR_LEX[c.name], t = x && CR_VAR[k] && CR_VAR[k][i];
+  if (!t) return L[i];
+  return t.replace(/\{thing\}/g, x[0]).replace(/\{act\}/g, x[1]).replace(/\{foe\}/g, x[2]).replace(/(^|[.!?] )([a-z])/g, (m, a, b) => a + b.toUpperCase()); };
 const crDeltaWord = d => Math.abs(d) < 3 ? "about the same" : d > 0 ? `${d} ahead` : `${-d} behind`;

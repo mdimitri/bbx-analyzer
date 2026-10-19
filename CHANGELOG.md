@@ -3,6 +3,15 @@
 Every release lists what changed for pilots first, then fixes. Screenshots, the banner and `docs/sample-report.pdf` are
 regenerated from the app for every release (`python tools/release.py all`).
 
+## 2.7.0 · 2026-10-19
+
+**Changed**
+- **Avatar creatures are livelier and funnier.** Every eye is now a googly one: white eyeball, coloured iris, a pupil that wanders, an expressive brow and a blink. Heads look around and nod out of step with the wings, and membrane and feather wings got finger and feather struts.
+- **Flying Carpet:** the fringe, painted border and corner tassels now ripple with the cloth (they used to stay still). A loose-parts check across all 150 creatures also fixed the dragonflies' detached tail tip and the Kite Dragon's ribbon tail.
+- **Avatar tooltips no longer repeat the animal's name,** and every line was reviewed so it reads sensibly for any creature. The animal's lines are dry one-liners with some levels using what that animal is known for (its habit, who it bothers); your quad's lines stay in the mechanical drone voice. The facts behind the animal lines are standard folklore; the jokes themselves are original, not quotations.
+- **Clearer hierarchy across the app:** the active tab is a filled accent pill, cards sit raised with a level-coloured top bar and brighter titles, *Top priorities* is larger, badges are bolder, keyboard focus is visible, and the sidebar steps back so the content takes the eye.
+- Version scheme moves to 2.7.0 for these visual changes.
+
 ## 2.6.2 · 2026-10-19
 
 **Changed**

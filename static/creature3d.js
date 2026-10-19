@@ -50,7 +50,20 @@ const CR3 = (() => {
     C.edge = L.metal || lum > 0.55 ? (dark ? hsl(hue, 0.4, 0.2) : hsl(hue, 0.5, 0.16)) : (dark ? hsl(hue, 0.55, 0.86) : hsl(hue, 0.5, 0.16));
     if (dark && lum > 0.55) C.edge = hsl(hue, 0.3, 0.3);
     const wings = [], tips = [], ticks = [], root = new T.Group(), owned = [], translucent = L.ghost || L.glass;
-    const mesh = (geo, col, o = {}) => { owned.push(geo); const g = new T.Group(), op = o.op != null ? o.op : translucent ? 0.62 : null, mt = new T.MeshStandardMaterial({ color: col, flatShading: true, roughness: L.metal ? 0.38 : 0.72, metalness: L.metal ? 0.7 : 0.05, side: o.double ? T.DoubleSide : T.FrontSide, transparent: op != null, opacity: op ?? 1, emissive: o.glow ? col : 0x000000, emissiveIntensity: o.glow ? 0.9 : 0 });
+    const seed = ((c.id || 1) * 0.6180339) % 1, heads = [];
+    // every small glowing ball a body plan uses as an eye becomes a googly one: white eyeball, coloured iris, dark pupil that wanders, an expressive brow and a shared blink
+    const blinkAmt = t => { const u = (t * 0.21 + seed) % 1; return u < 0.045 ? Math.sin(u / 0.045 * Math.PI) : 0; };
+    const mesh = (geo, col, o = {}) => { owned.push(geo);
+      if (o.glow && o.noEdge && !o.plain && geo.type === "IcosahedronGeometry" && geo.parameters.detail === 0 && geo.parameters.radius >= 0.02 && geo.parameters.radius <= 0.065) {
+        const r = geo.parameters.radius, eg = new T.Group(), ball = mesh(new T.IcosahedronGeometry(r * 1.6, 1), new T.Color(0xf4f4ec), { noEdge: true, plain: true, op: 1 }),
+          iris = mesh(new T.IcosahedronGeometry(r * 0.95, 0), col, { noEdge: true, plain: true }), pupil = mesh(new T.IcosahedronGeometry(r * 0.5, 0), new T.Color(0x16161c), { noEdge: true, plain: true, op: 1 }),
+          brow = mesh(new T.BoxGeometry(r * 0.5, r * 0.45, r * 2.6), C.edge, { noEdge: true, plain: true, op: 1 });
+        iris.position.x = r * 0.85; pupil.position.x = r * 1.38; brow.position.set(r * 0.3, r * 2.0, 0); eg.add(ball, iris, pupil, brow);
+        const mood = (seed * 7 % 1) - 0.5;
+        ticks.push(t => { const z = Math.sign(eg.position.z) || 1, b = blinkAmt(t); eg.scale.y = 1 - 0.88 * b;
+          const lx = Math.sin(t * 0.9 + seed * 9) * 0.5, ly = Math.sin(t * 1.3 + seed * 5) * 0.4; iris.position.set(r * 0.85, ly * r * 0.28, lx * r * 0.45); pupil.position.set(r * 1.38, ly * r * 0.36, lx * r * 0.55);
+          brow.rotation.x = z * (mood * 1.1 + 0.18 * Math.sin(t * 1.7 + seed * 11)); brow.position.y = r * (2.0 + 0.25 * Math.sin(t * 0.8 + seed * 3)); });
+        return eg; } const g = new T.Group(), op = o.op != null ? o.op : translucent ? 0.62 : null, mt = new T.MeshStandardMaterial({ color: col, flatShading: true, roughness: L.metal ? 0.38 : 0.72, metalness: L.metal ? 0.7 : 0.05, side: o.double ? T.DoubleSide : T.FrontSide, transparent: op != null, opacity: op ?? 1, emissive: o.glow ? col : 0x000000, emissiveIntensity: o.glow ? 0.9 : 0 });
       g.add(new T.Mesh(geo, mt)); if (!o.noEdge) g.add(new T.LineSegments(new T.EdgesGeometry(geo, o.ang ?? 22), new T.LineBasicMaterial({ color: C.edge, transparent: true, opacity: o.eo ?? 0.85 }))); return g; };
     const place = (g, x, y, z, sx, sy, sz) => { g.position.set(x, y, z); if (sx !== undefined) g.scale.set(sx, sy ?? sx, sz ?? sx); return g; };
     const ell = (sx, sy, sz, col, o = {}) => place(mesh(new T.IcosahedronGeometry(1, o.d ?? 1), col, o), 0, 0, 0, sx, sy, sz);
@@ -74,18 +87,22 @@ const CR3 = (() => {
     };
     const addWing = (px, py, pz, side, kind, s, ch, col, o = {}) => {
       const pivot = new T.Group(); pivot.position.set(px, py, pz); const m = mesh(outline(kind, s, ch), col, { double: true, op: o.op, eo: o.eo ?? 0.8, ang: 5 }); m.scale.z = side; pivot.add(m);
-      if (o.bones !== false) { const g = new T.BufferGeometry().setFromPoints([new T.Vector3(0, 0, 0), new T.Vector3(0.05 * s, 0, 0.5 * s * side), new T.Vector3(0.1 * ch, 0, s * side)]); pivot.add(new T.Line(g, new T.LineBasicMaterial({ color: C.edge }))); owned.push(g); }
+      if (o.bones !== false) { const g = new T.BufferGeometry().setFromPoints([new T.Vector3(0, 0, 0), new T.Vector3(0.05 * s, 0, 0.5 * s * side), new T.Vector3(0.1 * ch, 0, s * side)]); pivot.add(new T.Line(g, new T.LineBasicMaterial({ color: C.edge }))); owned.push(g);
+        if (kind === "membrane" || kind === "feather" || kind === "fin") { const pts = []; const fan = kind === "feather" ? [0.3, 0.52, 0.74, 0.92] : [0.45, 0.75, 0.95]; fan.forEach(f => { pts.push(new T.Vector3(0.04 * s, 0, 0.2 * s * side), new T.Vector3((kind === "feather" ? -0.5 : -0.38) * ch * (0.5 + 0.7 * (1 - Math.abs(f - 0.6))), 0, f * s * side)); });
+          const g2 = new T.BufferGeometry().setFromPoints(pts); pivot.add(new T.LineSegments(g2, new T.LineBasicMaterial({ color: C.edge, transparent: true, opacity: 0.55 }))); owned.push(g2); } }
       const tip = new T.Object3D(); tip.position.set(0.1 * ch, 0, s * side); pivot.add(tip); tips.push(tip); root.add(pivot);
       wings.push({ pivot, side, amp: o.amp ?? 0.8, ph: o.ph ?? 0, tw: o.tw ?? 0.25 }); return pivot; };
     const wingPair = (px, py, pz, kind, s, ch, col, o) => { addWing(px, py, pz, 1, kind, s, ch, col, o); addWing(px, py, -pz, -1, kind, s, ch, col, o); };
     const tailChain = (n, len, r0, col, y = 0, x0 = -0.8, wag = 0.5) => { const segs = []; let par = root;
       for (let i = 0; i < n; i++) { const seg = new T.Group(); seg.position.set(i ? -len : x0, i ? 0 : y, 0); const m = mesh(new T.ConeGeometry(r0 * (1 - i / (n + 1)), len * 1.15, 5).rotateZ(Math.PI / 2).translate(-len * 0.5, 0, 0), col); seg.add(m); par.add(seg); segs.push(seg); par = seg; }
       ticks.push(t => segs.forEach((s, i) => { s.rotation.y = Math.sin(t * 2.2 - i * 0.55) * wag * 0.35; s.rotation.z = Math.sin(t * 1.7 - i * 0.5) * 0.12; })); return segs; };
-    const K = { T, C, root, owned, ticks, wings, tips, mesh, place, ell, cone, cyl, box, limb, wingPair, addWing, tailChain, hsl };
+    const K = { T, C, root, owned, ticks, wings, tips, heads, mesh, place, ell, cone, cyl, box, limb, wingPair, addWing, tailChain, hsl };
     const arch = CR_ARCH[L.a] || CR_ARCH.spirit; arch(K, L.a in CR_ARCH ? L : { ...L, kind: "wisp" }, c);
     root.userData.owned = owned;
     const gait = { w: 6, amp: 0.45, gal: 0 };
     animateLimbs(K, joints, gait);
+    // heads look around and nod a little, out of step with the wing beat; every eye has already got its own blink and wandering pupil
+    K.heads.forEach((h, i) => { let b = null; ticks.push(t => { if (!b) b = [h.rotation.y, h.rotation.z]; h.rotation.y = b[0] + Math.sin(t * 0.7 + seed * 6 + i) * 0.2; h.rotation.z = b[1] + Math.sin(t * 1.1 + seed * 4 + i) * 0.06; }); });
     return { root, wings, tips, ticks, size: Math.sqrt(L.size || 1), look: L, vertical: false, gait };
   }
 

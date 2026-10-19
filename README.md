@@ -2,7 +2,7 @@
 
 **BBX Analyzer** reads your Betaflight blackbox logs and tells you, in plain words, what is going on with your quad and what to try next. It covers noise and filters, frame resonances, the tune, propwash, and motor and prop health. Every finding comes from your own log, and each fix comes with the CLI lines.
 
-It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 2.6.2** ([what's new](CHANGELOG.md)).
+It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 2.7.0** ([what's new](CHANGELOG.md)).
 
 ---
 
