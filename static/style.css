@@ -803,3 +803,8 @@ select#file { max-width: 230px; } .bar { gap: 6px; } .bar .btn { padding: 4px 8p
 .crt-n { font-size: clamp(24px, 1.8vw, 34px); }
 @media (min-width: 1700px) { .crt-top { grid-template-columns: repeat(3, 1fr); } .crt-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); } }
 @media (min-width: 1500px) { .maincard.behv .bgrid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+
+.crt-radar svg { max-width: clamp(300px, 28vw, 460px); } .crt-wedge { cursor: help; } .crt-wedge:hover { fill: color-mix(in srgb, var(--accent) 10%, transparent); }
+.crt-tip { position: fixed; z-index: 50; max-width: 320px; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; box-shadow: 0 8px 28px rgba(0,0,0,.45); font-size: 13px; display: grid; gap: 5px; }
+.crt-tip .crt-q { line-height: 1.35; } .crt-tip .crt-q span { font-weight: 600; margin-right: 4px; } .crt-tip .crt-num { font-variant-numeric: tabular-nums; font-weight: 600; } .crt-tip .crt-num small { color: var(--ink2); font-weight: 400; }
+.crt-why2 { color: var(--muted); font-size: 11.5px; }

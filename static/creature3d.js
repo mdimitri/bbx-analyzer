@@ -20,6 +20,11 @@ const CR3 = (() => {
     const legs = [], tails = [], mark = (j, kind, depth, top) => { j.kind = kind; j.depth = depth; j.top = top; j.kids.forEach(k => mark(k, kind, depth + 1, top)); };
     live.filter(j => !j.par).concat(live.filter(j => j.par)).forEach(j => { if (j.kind) return;
       if (isDown(j)) { mark(j, "leg", 0, j); legs.push(j); } else if (isBack(j) && !j.par) { mark(j, "tail", 0, j); tails.push(j); } });
+    // anything the body plan placed at a leg's or tail's end (hooves, claws, a tuft) rides along with that end
+    const skip = new Set([...joints.map(j => j.pv), ...K.wings.map(w => w.pivot)]), ends = live.filter(j => j.kind);
+    [...root.children].forEach(c => { if (skip.has(c) || !ends.length) return; let best = null, bd = 0.13;
+      for (const j of ends) { const d = Math.hypot(c.position.x - j.b[0], c.position.y - j.b[1], c.position.z - j.b[2]); if (d < bd) { bd = d; best = j; } }
+      if (best) { best.pv.add(c); c.position.set(c.position.x - best.a[0], c.position.y - best.a[1], c.position.z - best.a[2]); } });
     // detail: a rounded knee where two segments meet, a foot at the end of each leg and a tuft at the end of each tail
     const addTo = (j, geo, col, pos, o) => { const m = K.mesh(geo, col, { noEdge: true, ...o }); m.position.set(pos[0] - j.a[0], pos[1] - j.a[1], pos[2] - j.a[2]); j.pv.add(m); return m; };
     live.forEach(j => { if (j.kids.length) addTo(j, new T.IcosahedronGeometry(Math.max(j.r1, j.kids[0].r0) * 1.12, 0), j.col, j.b);
@@ -97,7 +102,8 @@ const CR3 = (() => {
       F.rollB = (F.rollB || 0) + (bankT - (F.rollB || 0)) * k; F.pitchB = (F.pitchB || 0) + (pitchT - (F.pitchB || 0)) * k;
       // gusts: slow wobble, as large as the creature is unsteady; jitter: fast and small, as large as it is rough
       const g = 1 - s.std, ju = 1 - s.smo; const ou = (key, sg) => { F[key] += (-F[key] / 0.7 * dt) + sg * Math.sqrt(2 / 0.7 * dt) * (rnd() + rnd() + rnd() + rnd() - 2) * 1.73; return F[key]; };
-      const wob = [ou("wx", 0.16 * g), ou("wy", 0.12 * g), ou("wz", 0.1 * g)], jit = [(rnd() - 0.5) * 0.09 * ju, (rnd() - 0.5) * 0.06 * ju, (rnd() - 0.5) * 0.09 * ju];
+      const wob = [ou("wx", 0.1 * g), ou("wy", 0.07 * g), ou("wz", 0.06 * g)], jk = 1 - Math.exp(-dt / 0.25); F.jr = F.jr || [0, 0, 0]; F.jt = F.jt || 0; if ((F.jt -= dt) < 0) { F.jt = 0.35; F.jg = [(rnd() - 0.5) * 0.05 * ju, (rnd() - 0.5) * 0.035 * ju, (rnd() - 0.5) * 0.05 * ju]; }
+      F.jr = F.jr.map((v, i) => v + ((F.jg ? F.jg[i] : 0) - v) * jk); const jit = F.jr;   // roughness: slow small drift, never per-frame noise
       // tricks: a roll, a loop or a flip, as fast as it can rotate
       let ar = 0, ap = 0;
       if (!F.trick && t > F.nextTrick) { const kinds = ["roll", "loop", "flip", "roll"]; F.trick = { kind: kinds[(rnd() * 4) | 0], u: 0, dur: Math.max(0.55, 2.4 - 1.9 * s.agi) * (rnd() < 0.3 ? 1.6 : 1), n: rnd() < 0.25 ? 2 : 1 }; }
@@ -163,7 +169,7 @@ const CR3 = (() => {
       rig.wings.forEach(w => { const a = w.amp * (0.55 + 0.55 * st.F.stat.pwr) * glide(st.c), p = st.flap + w.ph; const ang = a * (Math.sin(p) + 0.18 * Math.sin(2 * p + 0.6)); w.pivot.rotation.x = w.side * ang * (w.side > 0 ? 1 : 1) - 0; w.pivot.rotation.z = -w.tw * Math.cos(p) * 0.5; });
       { const g = rig.gait, spd = F.speed || 0; g.gal = Math.max(0, Math.min(1, (spd - 5) / 18)); g.w = 4 + 0.45 * spd * (0.5 + 0.7 / Math.max(0.5, rig.size)); g.amp = 0.32 + 0.32 * g.gal; }
       rig.ticks.forEach(fn => fn(st.t));
-      eu.set(F.rollA, F.yawA, F.pitchA, "YZX"); rig.root.quaternion.setFromEuler(eu); rig.root.position.set(0, Math.sin(st.t * 2 * Math.PI * hz * 0.5) * 0.05 * sc, 0);
+      eu.set(F.rollA, F.yawA, F.pitchA, "YZX"); q.setFromEuler(eu); if (!st.qs) st.qs = q.clone(); st.qs.slerp(q, 1 - Math.exp(-dt / 0.09)); rig.root.quaternion.copy(st.qs); rig.root.position.set(0, Math.sin(st.t * 1.1) * 0.025 * sc, 0);
       // the world streams past: wind streaks, wingtip trails and the ground grid all move against the flight direction
       const V = tmp.set(F.vel[0], F.vel[1], F.vel[2]), sp = V.length(), Vn = V.clone().normalize(), len = Math.min(3.2, 0.25 + sp * 0.07);
       const cl = dark ? [0.7, 0.85, 1] : [0.12, 0.25, 0.4], bg = dark ? [0, 0, 0] : [1, 1, 1];
@@ -230,7 +236,7 @@ async function renderCreature() {
     <aside class="crt-side">
       <div class="crt-verdict" id="crVerdict"></div>
       <div class="crt-radar" id="crRadar"></div>
-      <table class="crt-stats" id="crStats"></table>
+      <div class="hint">hover the chart for what each score means</div><div class="crt-tip" id="crTip" hidden></div>
       <div class="hint" id="crLore"></div>
     </aside>
     <div class="crt-all"><div class="crt-filter"><input id="crSearch" type="search" placeholder="Search ${CREATURES.length} creatures…" value="${esc(CRS.q_)}"><span class="chips" id="crKinds">${["all", ...Object.keys(CR_KINDS)].map(k => `<button class="chip ${CRS.kind === k ? "on" : ""}" data-k="${esc(k)}"><span style="color:var(--ink2)">${k === "all" ? "All kinds" : esc(k)}</span></button>`).join("")}</span></div>
@@ -247,8 +253,14 @@ async function renderCreature() {
       ${CR_AXES.map(([k, n], i) => { const [x, y] = pt(i, 99), [lx, ly] = pt(i, 117); return `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="var(--grid)"/><text x="${lx}" y="${ly}" text-anchor="middle" dominant-baseline="middle" font-size="8.5" fill="var(--ink2)">${n}</text>`; }).join("")}
       <polygon points="${poly(c.v)}" fill="${hex(c.kind)}" fill-opacity="0.3" stroke="${hex(c.kind)}" stroke-width="2"/><polygon points="${poly(q)}" fill="var(--accent)" fill-opacity="0.18" stroke="var(--accent)" stroke-width="2" stroke-dasharray="4 3"/></svg>
       <div class="crt-leg"><span><i style="border-top:2px dashed var(--accent)"></i>${esc(craft)}</span><span><i style="background:${hex(c.kind)}"></i>${esc(c.name)}</span></div>`;
-    $("crStats").innerHTML = `<tr><th></th><th>${esc(craft)} ↑</th><th>${esc(c.name)} ↑</th></tr>` + CR_AXES.map(([k, n], i) => { const why = CRS.q.why[k], miss = CRS.q.miss.includes(k), d = q[i] - c.v[i];
-      return `<tr><td title="${esc(why || "")}">${n}</td><td><div class="crt-bar"><i style="width:${q[i]}%;background:var(--accent)"></i></div><b>${q[i]}</b></td><td><div class="crt-bar"><i style="width:${c.v[i]}%;background:${hex(c.kind)}"></i></div><b>${c.v[i]}</b> <small class="${Math.abs(d) < 8 ? "hint" : d > 0 ? "lo" : "hi"}">${d > 0 ? "−" : "+"}${Math.abs(d)}</small></td></tr>${why ? `<tr class="crt-why"><td colspan="3">${esc(miss ? "no data for this, scored as average" : why)}</td></tr>` : ""}`; }).join("");
+    // hovering a wedge of the radar explains that axis: a one-liner for each of the two, then the numbers and what the score is made of
+    const tip = $("crTip"), wedge = (i, a0, a1) => { const p = k => [cx + Math.cos(k) * 100, cy + Math.sin(k) * 100]; return `<polygon class="crt-wedge" data-i="${i}" points="${cx},${cy} ${p(a0)} ${p(a1)}" fill="transparent"/>`; };
+    $("crRadar").querySelector("svg").insertAdjacentHTML("beforeend", CR_AXES.map((_, i) => { const a = -Math.PI / 2 + i / 8 * 2 * Math.PI; return wedge(i, a - Math.PI / 8, a + Math.PI / 8); }).join(""));
+    const show = (e, i) => { const [k, n] = CR_AXES[i], why = CRS.q.why[k], miss = CRS.q.miss.includes(k), d = c.v[i] - q[i];
+      tip.innerHTML = `<b>${n}</b><div class="crt-q"><span style="color:var(--accent)">${esc(craft)}</span> ${esc(crQuip(k, q[i]))}</div><div class="crt-q"><span style="color:${hex(c.kind)}">${esc(c.name)}</span> ${esc(crQuip(k, c.v[i]))}</div>
+        <div class="crt-num">${q[i]} → ${c.v[i]} <small>(${d > 0 ? "+" : d < 0 ? "−" : "±"}${Math.abs(d)})</small></div>${why ? `<div class="crt-why2">${esc(miss ? "no data for this, scored as average" : why)}</div>` : ""}`;
+      tip.hidden = false; const r = $("crRadar").getBoundingClientRect(), x = Math.min(e.clientX + 14, innerWidth - 330), y = Math.min(e.clientY + 14, innerHeight - tip.offsetHeight - 10); tip.style.left = x + "px"; tip.style.top = y + "px"; };
+    $("crRadar").querySelectorAll(".crt-wedge").forEach(w => { w.onmousemove = e => show(e, +w.dataset.i); w.onmouseleave = () => { tip.hidden = true; }; });
     $("crLore").textContent = crLore(c);
     if (CRS.g) { CRS.g.setCreature(c, Object.fromEntries(CR_AXES.map(([k], i) => [k, c.v[i] / 99])), false); }
   };

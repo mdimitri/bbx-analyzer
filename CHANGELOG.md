@@ -11,6 +11,7 @@ regenerated from the app for every release (`python tools/release.py all`).
 - **PID behaviour sub-tab** no longer shows the 3D viewer and lays out as chart on top, three verdict cards below.
 - **Avatar layout** scales with the window (16:10 stage that fits the height, closest matches under it), checked at 1920×1200.
 - **Avatar creatures move:** legs swing with a gait that follows the flight speed (diagonal steps when slow, a gallop when fast, knees bending as feet lift), tails wag, and models gained rounded knees, feet and tail tips.
+- **Avatar:** claws, hooves and tail tufts now travel with the moving limb ends; flight is smoother (no per-frame jitter, orientation eased, a gentle bob instead of one tied to the wing beat); the score table is replaced by hover tooltips on the radar chart, each opening with a one-liner (30 per axis, by score) for the quad and the creature.
 - **Splash exhaust:** 30% slower, scatters more randomly and slows sharply towards the end of its life.
 
 ## 2.6.1 · 2026-10-19
