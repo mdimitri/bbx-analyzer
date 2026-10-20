@@ -6,7 +6,7 @@ setlocal EnableExtensions
 title BBX Analyzer
 cd /d "%~dp0"
 echo.
-echo   bbx analyzer v2  -  Betaflight blackbox logs, turned into answers
+echo   bbx analyzer v3  -  Betaflight blackbox logs, turned into answers
 echo   ------------------------------------------------------------
 
 rem ---- must be a real, writable folder (not inside a zip preview)
@@ -95,7 +95,7 @@ rem ---- 4. 'BBX Analyzer' shortcuts with the icon, on the Desktop and in this f
 if exist ".venv\.shortcut" goto :run
 echo.
 echo [3/4] Creating the BBX Analyzer shortcut with its icon (one time)...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$w=New-Object -ComObject WScript.Shell; foreach($d in @([Environment]::GetFolderPath('Desktop'), (Get-Location).Path)){ $s=$w.CreateShortcut((Join-Path $d 'BBX Analyzer.lnk')); $s.TargetPath=(Join-Path (Get-Location).Path 'start.bat'); $s.WorkingDirectory=(Get-Location).Path; $s.IconLocation=(Join-Path (Get-Location).Path 'static\brand\bbx.ico'); $s.Description='BBX Analyzer v2 - Betaflight blackbox analysis'; $s.Save() }" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$w=New-Object -ComObject WScript.Shell; foreach($d in @([Environment]::GetFolderPath('Desktop'), (Get-Location).Path)){ $s=$w.CreateShortcut((Join-Path $d 'BBX Analyzer.lnk')); $s.TargetPath=(Join-Path (Get-Location).Path 'start.bat'); $s.WorkingDirectory=(Get-Location).Path; $s.IconLocation=(Join-Path (Get-Location).Path 'static\brand\bbx.ico'); $s.Description='BBX Analyzer v3 - Betaflight blackbox analysis'; $s.Save() }" >nul 2>&1
 echo       added a 'BBX Analyzer' shortcut to your Desktop.
 type nul > ".venv\.shortcut"
 

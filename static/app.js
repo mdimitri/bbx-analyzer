@@ -1096,9 +1096,10 @@ function drawPwTrace(cv, t0, t1, t, e) {
 // the filter-latency card: how much delay each stage of the filter chain adds, per axis, on the P/I path (gyro filters) and the D path (gyro + D-term filters),
 // against the reference setup, and what is left of the phase margin. Filled in once the delay model is ready (it is learned from the flight, so it takes a moment).
 async function fillLatency(stats) {
-  const card = $("latCard"); if (!card) return;
+  let card = $("latCard"); if (!card) return;
   let D; try { D = await api("delay", { ref: S.dlyRef || "bf" }); } catch (e) { D = null; }
   if (S.tab !== "summary" || !$("latCard")) return;
+  card = $("latCard");   // the summary may have been redrawn while the model was loading
   const axes = D && D.axes ? Object.keys(D.axes) : [];
   if (!axes.length) { card.innerHTML = body + `<div class="hint">not enough data to model the loop</div>`; return; }
   const COL = { gyro_lpf1: "--s1", gyro_lpf2: "--s2", gyro_notch: "--s3", rpm: "--s4", dyn_notch: "--s5", dterm_lpf1: "--roll", dterm_lpf2: "--pitch", dterm_notch: "--yaw", yaw_lpf: "--muted" };

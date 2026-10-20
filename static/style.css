@@ -863,3 +863,57 @@ select#file { max-width: 230px; } .bar { gap: 6px; } .bar .btn { padding: 4px 8p
 .crt-side .hint { font-size: 11px; line-height: 1.3; margin: 0; }
 .crt-side .crt-leg { margin-top: 2px; }
 @media (max-width: 1000px) { .crt-side { height: auto; min-height: 0; overflow: visible; } .crt-side .crt-radar { min-height: 320px; } }
+
+/* ---- 3.0: navigation rail (icons + names), stacked under the timeline; draggable to the top; card highlight on hover ---- */
+:root { --rail-h: 0px; }
+.rail { display: flex; align-items: stretch; gap: 2px; z-index: 40; background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(14px) saturate(1.3); border: 1px solid var(--border); }
+.rail .rbs { display: flex; flex: 1; min-width: 0; justify-content: center; align-items: stretch; overflow-x: auto; scrollbar-width: none; padding: 0 6px; }
+.rail .rbs::-webkit-scrollbar { display: none; }
+.rail .rb { all: unset; box-sizing: border-box; cursor: pointer; position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; min-width: 78px; max-width: 104px; padding: 8px 6px 7px; color: var(--ink2); text-align: center; transition: color .15s, background .15s; flex: 0 1 auto; }
+.rail .rb svg { transition: transform .16s cubic-bezier(.2,.9,.2,1); flex: none; }
+.rail .rb span { font: 600 11.5px/1.15 system-ui, -apple-system, "Segoe UI", sans-serif; letter-spacing: .01em; }
+.rail .rb:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.rail .rb:hover svg { transform: translateY(-3px) scale(1.2); }
+.rail .rb:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; border-radius: 8px; }
+.rail .rb.on { color: var(--ink); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.rail .rb.on svg { color: var(--accent); }
+.rail .rb.on::before { content: ""; position: absolute; left: 14%; right: 14%; height: 3px; background: var(--accent); box-shadow: 0 0 14px var(--accent); }
+.rail .lv { position: absolute; top: 9px; right: calc(50% - 22px); width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 2px var(--surface); }
+.rail .sep { align-self: stretch; width: 1px; margin: 14px 5px; background: var(--border); flex: none; }
+.rail .grip, .rail .rmenu { all: unset; box-sizing: border-box; cursor: grab; display: grid; place-items: center; width: 34px; color: var(--muted); flex: none; }
+.rail .rmenu { cursor: pointer; font-size: 20px; font-weight: 700; letter-spacing: 1px; }
+.rail .grip:hover, .rail .rmenu:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.rail .grip:active { cursor: grabbing; }
+body.rail-bottom .rail { position: fixed; left: 0; right: 0; bottom: 0; border-width: 1px 0 0; box-shadow: 0 -10px 30px -18px #000; }
+body.rail-bottom .rail .rb.on::before { top: -1px; border-radius: 0 0 4px 4px; }
+body.rail-top .rail { position: sticky; top: 44px; border-width: 0 0 1px; box-shadow: 0 10px 30px -18px #000; }
+body.rail-top .rail .rb.on::before { bottom: -1px; border-radius: 4px 4px 0 0; }
+body.rail-classic .rail, body.demo .rail { display: none; }
+body:not(.rail-classic) #tabs { display: none; }
+/* the timeline sits on the rail; floating things lift with it */
+body.rail-bottom { padding-bottom: var(--rail-h); }
+body.rail-bottom .dock { bottom: var(--rail-h); }
+body.rail-bottom .busy { bottom: calc(var(--rail-h) + 16px); }
+body.rail-bottom #vid.vid-pip { bottom: calc(var(--rail-h) + 170px); }
+body.rail-top .side, body.rail-top .sideopen { top: calc(44px + var(--rail-h) + 4px); }
+body.rail-top .side { max-height: calc(100vh - 52px - var(--rail-h)); }
+body.rail-top .pside { top: calc(var(--rail-h) + 52px); }
+.rail.dragging { position: fixed !important; left: 0; right: 0; z-index: 90; box-shadow: 0 20px 50px -10px #000; opacity: .96; cursor: grabbing; }
+body.rail-dragging { user-select: none; cursor: grabbing; }
+body.rail-dragging::before, body.rail-dragging::after { content: ""; position: fixed; left: 0; right: 0; height: 56px; z-index: 80; pointer-events: none; border: 2px dashed color-mix(in srgb, var(--accent) 50%, transparent); background: color-mix(in srgb, var(--accent) 6%, transparent); transition: background .15s; }
+body.rail-dragging::before { top: 0; } body.rail-dragging::after { bottom: 0; }
+body[data-rail-zone="top"]::before, body[data-rail-zone="bottom"]::after { background: color-mix(in srgb, var(--accent) 28%, transparent); }
+.railmenu { position: fixed; z-index: 120; min-width: 190px; display: flex; flex-direction: column; padding: 6px; border-radius: 12px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 18px 50px -10px #000; }
+.railmenu button { all: unset; cursor: pointer; padding: 8px 12px; border-radius: 8px; font-size: 13px; color: var(--ink); }
+.railmenu button:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.railmenu button.on { color: var(--accent); font-weight: 700; }
+.railmenu button.on::before { content: "✓ "; }
+@media (max-width: 760px) { .rail .rb { min-width: 66px; } .rail .rb span { font-size: 10.5px; } }
+/* card highlight: lifts, lights its edge in its level colour and follows the pointer with a soft glow */
+.dcard { position: relative; transition: transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s, background .2s; }
+.dcard::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; opacity: 0; transition: opacity .25s; background: radial-gradient(260px 200px at var(--mx, 50%) var(--my, 30%), color-mix(in srgb, var(--lvl, var(--accent)) 20%, transparent), transparent 70%); }
+.dcard:hover { transform: translateY(-3px); background: color-mix(in srgb, var(--lvl, var(--accent)) 6%, var(--raise)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--lvl, var(--accent)) 65%, transparent), 0 18px 40px -18px color-mix(in srgb, var(--lvl, var(--accent)) 70%, #000), 0 8px 24px -16px rgba(0,0,0,.6); }
+.dcard:hover::after { opacity: 1; }
+.dcard:hover h3, .dcard:hover .dhead h3 { color: var(--lvl, var(--accent)); }
+@media (prefers-reduced-motion: reduce) { .dcard, .rail .rb svg { transition: none; } .dcard:hover { transform: none; } .rail .rb:hover svg { transform: none; } }
+.dcard:hover h3, .dcard:hover .dhead h3 { color: color-mix(in srgb, var(--lvl, var(--accent)) 55%, var(--ink)); }

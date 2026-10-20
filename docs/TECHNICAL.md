@@ -30,6 +30,7 @@ After that it's cached as `logs/<name>.<n>.npz` and loads in under half a second
 | `backend/motors.py` | motor & prop health: per-motor order tracking, load balance, speed per command, desyncs, battery waste |
 | `backend/plan.py` | tune plan (all findings in order, one CLI), scorecard, before → after comparison, report data |
 | `static/app.js` | state → fetch → Plotly, tabs, busy/progress panel, tooltips |
+| `static/rail.js` | navigation rail: mirrors the `#tabs` buttons (which stay in the DOM and do the work), position bottom / top / classic kept in `localStorage` (`bbx.rail`), drag by the grip, `--rail-h` offsets the timeline dock and floating panels; also the card pointer glow |
 | `static/delay.js`, `plan.js`, `compare.js`, `report.js` | Filter delay tab, Tune plan, Before → after, PDF report (jsPDF + DejaVu fonts in `static/vendor/`) |
 | `static/pidsim.js` | browser-side closed-loop simulation at the PID loop rate, loop margins / sensitivity, auto-suggest |
 | `static/player.js`, `timesync.js`, `video.js` | playback + 3D viewer, synced time navigation, DVR video |

@@ -3,6 +3,16 @@
 Every release lists what changed for pilots first, then fixes. Screenshots, the banner and `docs/sample-report.pdf` are
 regenerated from the app for every release (`python tools/release.py all`).
 
+## 3.0.0 · 2026-10-20
+
+**Changed**
+- **New navigation bar:** every tab is a button with an icon and its name, grouped (overview · tune · analysis · avatar), with a coloured dot for what the tab found. It sits at the bottom of the window with the timeline stacked directly above it, so the two never cover each other. Drag it by the grip to the top of the window (it snaps to the nearer edge and remembers where you left it), or pick top, bottom or the classic tab strip from the **⋯** menu. The sidebar, the progress panel and the picture-in-picture video move out of its way.
+- **Cards light up when you point at them:** the card lifts, its edge and title take its level colour and a soft glow follows the pointer.
+
+**Fixed**
+- **Avatar: wing beats were far too fast on some creatures.** Insects, fairies and a few absurd ones beat at 15-45 Hz (the Bumblebee at about 45 Hz), which strobes on a 60 Hz screen. Fast beats are now compressed (the order between creatures stays, a bumblebee still beats faster than a dragon) and the stroke shortens as the beat gets faster; a single frame can no longer advance the beat by more than about 45°. Leg cycles of fast, small creatures are compressed the same way.
+- **Filter latency card:** an error in the console when you left the Summary while the delay model was loading (the card had been redrawn and the chart was drawn into the old one).
+
 ## 2.9.0 · 2026-10-19
 
 **Changed**

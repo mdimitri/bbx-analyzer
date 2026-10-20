@@ -200,10 +200,12 @@ const CR3 = (() => {
       const F = st.F.step(dt), sc = rig.sc, dark = curTheme === "dark";
       // wing beats: a slower flap for big and tireless creatures, a harder beat for strong ones; a gliding pause when it banks hard
       const cs = st.stats.creature, lk = rig.look, fam = lk.a === "insect" ? 4.5 : lk.fey ? 3.5 : lk.a === "spirit" ? 0.6 : lk.a === "fish" || lk.a === "squid" ? 0.35 : lk.hang ? 1.4 : lk.a === "craft" ? 0.9 : 1;
-      const hz = [0, 5.5, 4.2, 3.2, 2.2, 1.5][st.c.sz] * fam * (st.c.kind === "Absurd & unlikely" ? 2.2 : 1) * (1.3 - 0.5 * cs.end) * (0.85 + 0.4 * (st.F.stat.pwr)) * (1 + 0.25 * Math.max(0, Math.min(1, F.climb / 8)));
-      st.flap += dt * hz * 2 * Math.PI; const glide = c => 1 - 0.55 * Math.max(0, Math.min(1, Math.abs(F.bank) / 1.1)) * (lk.a === "bird" || lk.a === "humanoid" ? 1 : 0.4);
-      rig.wings.forEach(w => { const a = w.amp * (0.55 + 0.55 * st.F.stat.pwr) * glide(st.c), p = st.flap + w.ph; const ang = a * (Math.sin(p) + 0.18 * Math.sin(2 * p + 0.6)); w.pivot.rotation.x = w.side * ang * (w.side > 0 ? 1 : 1) - 0; w.pivot.rotation.z = -w.tw * Math.cos(p) * 0.5; w.flex(p, a); });
-      { const g = rig.gait, spd = F.speed || 0; g.gal = Math.max(0, Math.min(1, (spd - 5) / 18)); g.w = 4 + 0.45 * spd * (0.5 + 0.7 / Math.max(0.5, rig.size)); g.amp = 0.32 + 0.32 * g.gal; }
+      const hzRaw = [0, 5.5, 4.2, 3.2, 2.2, 1.5][st.c.sz] * fam * (st.c.kind === "Absurd & unlikely" ? 2.2 : 1) * (1.3 - 0.5 * cs.end) * (0.85 + 0.4 * (st.F.stat.pwr)) * (1 + 0.25 * Math.max(0, Math.min(1, F.climb / 8)));
+      // real insects beat their wings 100+ times a second; on a 60 Hz screen that strobes, so fast beats are compressed (the order between creatures stays) and the stroke gets shorter the faster it goes
+      const hz = hzRaw <= 4 ? hzRaw : 4 + 2.2 * Math.log(hzRaw / 4), ampK = Math.max(0.55, 1 - 0.045 * Math.max(0, hzRaw - 6));
+      st.flap += Math.min(dt * hz * 2 * Math.PI, 0.8); const glide = c => 1 - 0.55 * Math.max(0, Math.min(1, Math.abs(F.bank) / 1.1)) * (lk.a === "bird" || lk.a === "humanoid" ? 1 : 0.4);
+      rig.wings.forEach(w => { const a = w.amp * ampK * (0.55 + 0.55 * st.F.stat.pwr) * glide(st.c), p = st.flap + w.ph; const ang = a * (Math.sin(p) + 0.18 * Math.sin(2 * p + 0.6)); w.pivot.rotation.x = w.side * ang * (w.side > 0 ? 1 : 1) - 0; w.pivot.rotation.z = -w.tw * Math.cos(p) * 0.5; w.flex(p, a); });
+      { const g = rig.gait, spd = F.speed || 0; g.gal = Math.max(0, Math.min(1, (spd - 5) / 18)); const gw = 4 + 0.45 * spd * (0.5 + 0.7 / Math.max(0.5, rig.size)); g.w = gw <= 10 ? gw : 10 + 3 * Math.log(gw / 10); g.amp = 0.32 + 0.32 * g.gal; }
       rig.ticks.forEach(fn => fn(st.t));
       eu.set(F.rollA, F.yawA, F.pitchA, "YZX"); q.setFromEuler(eu); if (!st.qs) st.qs = q.clone(); st.qs.slerp(q, 1 - Math.exp(-dt / 0.09)); rig.root.quaternion.copy(st.qs); rig.root.position.set(0, Math.sin(st.t * 1.1) * 0.025 * sc, 0);
       // the world streams past: wind streaks, wingtip trails and the ground grid all move against the flight direction

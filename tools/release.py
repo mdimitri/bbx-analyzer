@@ -122,6 +122,9 @@ async def _shots(port):
 
         async def tab(t):
             await pg.evaluate("t => document.querySelector('#tabs [data-tab=\"' + t + '\"]').click()", t)
+            if t == "summary":
+                try: await pg.wait_for_function("() => !document.body.innerText.includes('Loading the delay model')", timeout=20000)
+                except Exception: pass
             if t == "pidsim":
                 try:
                     await pg.click("#sgOk", timeout=5000)

@@ -2,7 +2,7 @@
 
 **BBX Analyzer** reads your Betaflight blackbox logs and tells you, in plain words, what is going on with your quad and what to try next. It covers noise and filters, frame resonances, the tune, propwash, and motor and prop health. Every finding comes from your own log, and each fix comes with the CLI lines.
 
-It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 2.9.0** ([what's new](CHANGELOG.md)).
+It runs on your computer, in your browser. Your logs never leave your machine. **Current version: 3.0.0** ([what's new](CHANGELOG.md)).
 
 ---
 
@@ -87,6 +87,7 @@ Open a log and BBX answers three questions: **what is wrong, why, and what do I 
 
 ## Good to know
 
+- **Finding your way around.** Every tab is a button with an icon and its name on a bar at the bottom of the window; the timeline sits right above it. A coloured dot on a button shows what that tab found. Drag the bar by its grip to put it on top, or use the **⋯** menu for top, bottom or the classic tab strip. Cards light up when you point at them.
 - **Which logs?** Betaflight `.BBL` / `.BFL` files. For the motor analyses, turn on **bidirectional DShot** (eRPM in the log). Logging at 1–2 kHz is ideal.
 - **Where are my logs kept?** In the `logs` folder inside BBX. Decoded logs and the learned quad models are cached there (`*.npz`, `*.sim.json`), so a log opens instantly the second time. Delete them any time; they're rebuilt when needed.
 - **Speed.** The launchers also install `numba` when it's available for your Python: it compiles the simulator's inner loops, so learning a quad's dynamics takes a few seconds instead of ~15. Without it everything works, just slower.
